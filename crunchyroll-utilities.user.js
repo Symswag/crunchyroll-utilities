@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      5.2
-// @description  Couteau suisse Crunchyroll : Fix navigation (SPA), Bouton 1ère position, Local-First & Cloud.
+// @version      6.0
+// @description  Couteau suisse Crunchyroll : Auto-Skip, Cloud Sync & Multilingue (FR/EN).
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
 // @grant        GM_setValue
@@ -16,6 +16,68 @@
 (function() {
     'use strict';
 
+    // =====================================================================
+    // 🌍 SYSTÈME DE TRADUCTION (i18n)
+    // =====================================================================
+    const i18n = {
+        fr: {
+            configTitle: "☁️ Configuration Cloud",
+            configDesc: "Entrez vos identifiants JSONBin.io pour synchroniser vos skips entre vos appareils.",
+            saveKeys: "Sauvegarder & Retour",
+            autoSkip: "Activer Auto Skip",
+            type: "Type :",
+            start: "Début :",
+            end: "Fin :",
+            saveBtn: "Enregistrer le segment",
+            savedList: "Segments sauvegardés :",
+            emptyList: "Rien pour cet épisode.",
+            delete: "Supprimer",
+            verify: "Vérification...",
+            errMissing: "⚠️ Clés Cloud manquantes (⚙️)",
+            errConn: "❌ Erreur de connexion Cloud",
+            cloudCheck: "⬇️ Vérification Cloud...",
+            cloudEmpty: "✅ Cloud vierge (Prêt pour la 1ère sauvegarde)",
+            cloudPushOld: "⏳ Envoi des anciens épisodes...",
+            cloudOk: "✅ À jour avec le Cloud",
+            cloudSend: "⏳ Envoi vers le Cloud...",
+            cloudSyncOk: "✅ Synchro Cloud OK",
+            cloudDel: "⏳ Suppression Cloud..."
+        },
+        en: {
+            configTitle: "☁️ Cloud Config",
+            configDesc: "Enter your JSONBin.io credentials to sync your skips across devices.",
+            saveKeys: "Save & Return",
+            autoSkip: "Enable Auto Skip",
+            type: "Type:",
+            start: "Start:",
+            end: "End:",
+            saveBtn: "Save Segment",
+            savedList: "Saved Segments:",
+            emptyList: "Nothing for this episode.",
+            delete: "Delete",
+            verify: "Verifying...",
+            errMissing: "⚠️ Missing Cloud Keys (⚙️)",
+            errConn: "❌ Cloud Connection Error",
+            cloudCheck: "⬇️ Checking Cloud...",
+            cloudEmpty: "✅ Empty Cloud (Ready for 1st save)",
+            cloudPushOld: "⏳ Uploading old episodes...",
+            cloudOk: "✅ Up to date with Cloud",
+            cloudSend: "⏳ Sending to Cloud...",
+            cloudSyncOk: "✅ Cloud Sync OK",
+            cloudDel: "⏳ Deleting from Cloud..."
+        }
+    };
+
+    // Détection de la langue du navigateur (FR par défaut si c'est du français, sinon EN)
+    const userLang = navigator.language.startsWith('fr') ? 'fr' : 'en';
+    
+    // Fonction magique pour traduire
+    const t = (key) => i18n[userLang][key] || i18n['en'][key];
+
+    // =====================================================================
+    // ⚙️ LOGIQUE PRINCIPALE
+    // =====================================================================
+
     const INTRO_OUTRO_LENGTH = 90;
     let videoElement = null;
     let playerContainer = null;
@@ -25,10 +87,8 @@
     let hasAutoFilled = false;
     let autoFillTimer = null;
     
-    // Base de données locale unifiée
     let localData = GM_getValue('cr_sync_data', {}); 
 
-    // --- SYSTÈME DE LOGS PERSONNALISÉ ---
     function crLog(message, type = 'info', data = null) {
         const prefix = '%c CR Utils ';
         const prefixStyle = 'background: #f47521; color: #ffffff; font-weight: bold; border-radius: 4px; padding: 2px 4px; margin-right: 5px; font-family: sans-serif;';
@@ -50,12 +110,10 @@
         #cr-skip-menu, #cr-config-menu { position: absolute; bottom: 85px; right: 15px; z-index: 2147483647; background: rgba(14, 15, 18, 0.95); color: #fff; padding: 18px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); width: 300px; font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; box-shadow: 0 10px 30px rgba(0,0,0,0.7); display: none; backdrop-filter: blur(5px); }
         .cr-menu-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); }
         .cr-menu-header h3 { margin: 0; color: #f47521; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
-        
         .cr-header-actions { display: flex; gap: 12px; align-items: center; }
         .cr-icon-btn { background: transparent; color: #aaa; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; transition: color 0.2s; }
         .cr-icon-btn:hover { color: #fff; }
         #cr-close-menu, #cr-close-config { font-size: 18px; line-height: 1; }
-        
         .cr-row { margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
         .cr-row label { color: #ddd; display: flex; align-items: center; gap: 8px; cursor: pointer; }
         .cr-input-group { display: flex; align-items: center; gap: 5px; }
@@ -66,10 +124,8 @@
         .cr-btn-time:hover { background: rgba(244,117,33,0.1); border-color: rgba(244,117,33,0.6); }
         .cr-btn-save { background: #f47521; color: white; border: none; width: 100%; padding: 10px; margin-top: 10px; font-weight: bold; cursor: pointer; border-radius: 4px; text-transform: uppercase; font-size: 13px; transition: background 0.2s; }
         .cr-btn-save:hover { background: #df6210; }
-        
         .cr-input-full { background: #1e1f23; color: #aaa; border: 1px solid #333; padding: 8px; border-radius: 4px; width: 100%; font-family: monospace; font-size: 12px; margin-bottom: 8px; box-sizing: border-box; }
         .cr-input-full:focus { border-color: #f47521; outline: none; color: #fff;}
-
         #cr-saved-list { margin-top: 15px; font-size: 13px; }
         .cr-saved-title { margin-bottom: 8px; color:#888; font-style: italic; }
         .cr-saved-item { display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; margin-bottom: 6px; border-radius: 4px; border: 1px solid transparent; }
@@ -85,15 +141,11 @@
         .cr-sync-status { font-size: 10px; text-align: center; margin-top: 10px; opacity: 0.5; color: #aaa; }
     `);
 
-    // --- LOGIQUE CLOUD API SÉCURISÉE ---
     function syncCloud(method, data = null) {
         const binId = GM_getValue('cr_bin_id', '');
         const apiKey = GM_getValue('cr_api_key', '');
 
-        if (!binId || !apiKey) {
-            crLog("Clés Cloud manquantes, requête annulée", "warn");
-            return Promise.resolve(null);
-        }
+        if (!binId || !apiKey) return Promise.resolve(null);
 
         return new Promise((resolve) => {
             GM_xmlhttpRequest({
@@ -105,15 +157,9 @@
                     try {
                         const json = JSON.parse(res.responseText);
                         resolve(json.record ? json.record : null);
-                    } catch (e) {
-                        crLog("Erreur de parsing API", "error", e);
-                        resolve(null);
-                    }
+                    } catch (e) { resolve(null); }
                 },
-                onerror: (err) => {
-                    crLog("Erreur réseau API", "error", err);
-                    resolve(null);
-                }
+                onerror: () => resolve(null)
             });
         });
     }
@@ -122,27 +168,25 @@
         const statusEl = document.getElementById('cr-sync-text');
         
         if (!GM_getValue('cr_bin_id', '') || !GM_getValue('cr_api_key', '')) {
-            if (statusEl) statusEl.innerText = "⚠️ Clés Cloud manquantes (⚙️)";
+            if (statusEl) statusEl.innerText = t('errMissing');
             return;
         }
 
-        if (statusEl) statusEl.innerText = "⬇️ Vérification Cloud...";
-        crLog("Récupération des données Cloud...", "cloud");
+        if (statusEl) statusEl.innerText = t('cloudCheck');
         
         const cloud = await syncCloud("GET");
         
         if (!cloud) {
-            if (statusEl) statusEl.innerText = "❌ Erreur de connexion Cloud";
+            if (statusEl) statusEl.innerText = t('errConn');
             return;
         }
 
         if (cloud.init === "ok" && Object.keys(cloud).length === 1) {
-            if (statusEl) statusEl.innerText = "✅ Cloud vierge (Prêt pour la 1ère sauvegarde)";
+            if (statusEl) statusEl.innerText = t('cloudEmpty');
             return;
         }
             
         if (JSON.stringify(cloud) !== JSON.stringify(localData)) {
-            crLog("Mise à jour Cloud détectée !", "info", cloud);
             let needPush = false;
             GM_listValues().forEach(key => {
                 if (key.startsWith("cr_ep_")) {
@@ -158,18 +202,15 @@
             GM_setValue('cr_sync_data', localData);
             
             if (needPush) {
-                if (statusEl) statusEl.innerText = "⏳ Envoi des anciens épisodes...";
+                if (statusEl) statusEl.innerText = t('cloudPushOld');
                 await syncCloud("PUT", localData);
             }
             updateMenuList(); drawHighlights();
-        } else {
-            crLog("La base locale est déjà à jour.", "success");
         }
         
-        if (statusEl) statusEl.innerText = "✅ À jour avec le Cloud";
+        if (statusEl) statusEl.innerText = t('cloudOk');
     }
 
-    // --- UTILITAIRES ---
     function timeToSeconds(timeStr) {
         if (!timeStr) return 0;
         const parts = timeStr.split(':').map(Number);
@@ -189,12 +230,10 @@
     }
 
     function getEpisodeId() {
-        // Renvoie null si on n'est pas sur une page /watch/
         const match = window.location.pathname.match(/\/watch\/([^\/]+)/);
         return match ? match[1] : null;
     }
 
-    // --- LOGIQUE SKIP ---
     function handleTimeUpdate() {
         if (!autoSkipEnabled || !videoElement || isSkipping) return;
         
@@ -204,7 +243,6 @@
 
         const jumpToTime = (targetTime) => {
             isSkipping = true; 
-            crLog(`Saut automatique vers ${secondsToTime(targetTime)}`, "info");
             const slider = document.querySelector('input.timeline-slider[type="range"]');
             if (slider) {
                 slider.value = targetTime;
@@ -258,8 +296,7 @@
         });
     }
 
-    // --- UI & INITIALISATION ---
-    const CR_GEAR_PATH = `M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.05-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.12.56-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.73 8.87c-.11.2-.06.47.12.61l2.03 1.58c-.04.3-.06.62-.06.94s.02.64.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .43-.17.47-.41l.36-2.54c.59-.24 1.12-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.11-.2.06-.47-.12-.61l-2.03-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z`;
+    const CR_GEAR_PATH = `M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.05-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.12.56-1.62-.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.73 8.87c-.11.2-.06.47.12.61l2.03 1.58c-.04.3-.06.62-.06.94s.02.64.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .43-.17.47-.41l.36-2.54c.59-.24 1.12-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.11-.2.06-.47-.12-.61l-2.03-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z`;
     const CR_GEAR_SVG_MAIN = `<svg viewBox="0 0 24 24" fill="currentColor" class="kat:w-24 kat:h-24 kat:@lg:w-40 kat:@lg:h-40 kat:shrink-0"><path d="${CR_GEAR_PATH}"/></svg>`;
     const CR_GEAR_SVG_MINI = `<svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;"><path d="${CR_GEAR_PATH}"/></svg>`;
 
@@ -274,59 +311,56 @@
             videoElement.addEventListener('timeupdate', handleTimeUpdate);
             videoElement.addEventListener('loadedmetadata', () => setTimeout(drawHighlights, 1000));
             videoElement.dataset.crSkipInitialized = "true";
-            crLog("Lecteur vidéo accroché avec succès.", "success");
         }
 
         if (!document.getElementById('cr-skip-menu')) {
             const stop = (e) => e.stopPropagation();
 
-            // 1. MENU PRINCIPAL (SKIPS)
             const menu = document.createElement('div');
             menu.id = 'cr-skip-menu';
+            // Utilisation de la fonction t() pour insérer le bon texte
             menu.innerHTML = `
                 <div class="cr-menu-header">
                     <h3>⚙️ CR Utilities</h3>
                     <div class="cr-header-actions">
-                        <button class="cr-icon-btn" id="cr-open-config" title="Configuration Cloud">${CR_GEAR_SVG_MINI}</button>
-                        <button class="cr-icon-btn" id="cr-close-menu" title="Fermer">✖</button>
+                        <button class="cr-icon-btn" id="cr-open-config" title="Cloud Config">${CR_GEAR_SVG_MINI}</button>
+                        <button class="cr-icon-btn" id="cr-close-menu">✖</button>
                     </div>
                 </div>
-                <div class="cr-row"><label><input type="checkbox" id="cr-auto-skip-cb" ${autoSkipEnabled ? 'checked' : ''}> Activer Auto Skip</label></div>
+                <div class="cr-row"><label><input type="checkbox" id="cr-auto-skip-cb" ${autoSkipEnabled ? 'checked' : ''}> ${t('autoSkip')}</label></div>
                 <hr style="border-color: rgba(255,255,255,0.05); margin: 12px 0;">
-                <div class="cr-row"><label>Type :</label><select id="cr-type-sel"><option value="intro">Intro</option><option value="outro">Outro</option></select></div>
-                <div class="cr-row"><label>Début :</label><div class="cr-input-group"><input type="text" id="cr-start-in" placeholder="00:00"><button class="cr-btn-time" id="cr-get-start">⏱️</button></div></div>
-                <div class="cr-row"><label>Fin :</label><div class="cr-input-group"><input type="text" id="cr-end-in" placeholder="01:30"><button class="cr-btn-time" id="cr-get-end">⏱️</button></div></div>
-                <button class="cr-btn-save" id="cr-save-btn">Enregistrer le segment</button>
+                <div class="cr-row"><label>${t('type')}</label><select id="cr-type-sel"><option value="intro">Intro</option><option value="outro">Outro</option></select></div>
+                <div class="cr-row"><label>${t('start')}</label><div class="cr-input-group"><input type="text" id="cr-start-in" placeholder="00:00"><button class="cr-btn-time" id="cr-get-start">⏱️</button></div></div>
+                <div class="cr-row"><label>${t('end')}</label><div class="cr-input-group"><input type="text" id="cr-end-in" placeholder="01:30"><button class="cr-btn-time" id="cr-get-end">⏱️</button></div></div>
+                <button class="cr-btn-save" id="cr-save-btn">${t('saveBtn')}</button>
                 <div id="cr-saved-list"></div>
-                <div class="cr-sync-status" id="cr-sync-text">Vérification...</div>
+                <div class="cr-sync-status" id="cr-sync-text">${t('verify')}</div>
             `;
             playerContainer.appendChild(menu);
             menu.addEventListener('mousedown', stop); menu.addEventListener('click', stop);
 
-            // 2. MENU SECONDAIRE (CONFIGURATION CLOUD)
             const configMenu = document.createElement('div');
             configMenu.id = 'cr-config-menu';
             configMenu.innerHTML = `
                 <div class="cr-menu-header">
-                    <h3>☁️ Cloud Config</h3>
+                    <h3>${t('configTitle')}</h3>
                     <div class="cr-header-actions">
-                        <button class="cr-icon-btn" id="cr-close-config" title="Retour">✖</button>
+                        <button class="cr-icon-btn" id="cr-close-config">✖</button>
                     </div>
                 </div>
-                <div style="font-size: 12px; color:#aaa; margin-bottom:12px; line-height: 1.4;">Entrez vos identifiants JSONBin.io pour synchroniser vos skips entre vos appareils.</div>
+                <div style="font-size: 12px; color:#aaa; margin-bottom:12px; line-height: 1.4;">${t('configDesc')}</div>
                 
                 <label style="font-size: 11px; color:#ddd; margin-bottom: 4px; display: block;">Bin ID</label>
-                <input type="text" class="cr-input-full" id="cr-bin-id" placeholder="Ex: 69ef4a..." value="${GM_getValue('cr_bin_id', '')}">
+                <input type="text" class="cr-input-full" id="cr-bin-id" placeholder="Bin ID" value="${GM_getValue('cr_bin_id', '')}">
                 
                 <label style="font-size: 11px; color:#ddd; margin-bottom: 4px; margin-top: 8px; display: block;">API Master Key</label>
-                <input type="password" class="cr-input-full" id="cr-api-key" placeholder="Ex: $2a$10$..." value="${GM_getValue('cr_api_key', '')}">
+                <input type="password" class="cr-input-full" id="cr-api-key" placeholder="API Key" value="${GM_getValue('cr_api_key', '')}">
                 
-                <button class="cr-btn-save" id="cr-save-keys" style="margin-top: 15px;">Sauvegarder & Retour</button>
+                <button class="cr-btn-save" id="cr-save-keys" style="margin-top: 15px;">${t('saveKeys')}</button>
             `;
             playerContainer.appendChild(configMenu);
             configMenu.addEventListener('mousedown', stop); configMenu.addEventListener('click', stop);
 
-            // Événements de navigation
             document.getElementById('cr-close-menu').onclick = () => menu.style.display = 'none';
             document.getElementById('cr-open-config').onclick = () => {
                 menu.style.display = 'none';
@@ -337,17 +371,14 @@
                 menu.style.display = 'block';
             };
             
-            // Sauvegarde config
             document.getElementById('cr-save-keys').onclick = () => {
                 GM_setValue('cr_bin_id', document.getElementById('cr-bin-id').value.trim());
                 GM_setValue('cr_api_key', document.getElementById('cr-api-key').value.trim());
-                crLog("Clés Cloud sauvegardées en local.", "success");
                 configMenu.style.display = 'none';
                 menu.style.display = 'block';
                 pullFromCloudBackground();
             };
 
-            // Actions principales
             document.getElementById('cr-auto-skip-cb').onchange = (e) => { autoSkipEnabled = e.target.checked; GM_setValue('cr_auto_skip', autoSkipEnabled); };
             
             document.getElementById('cr-get-start').onclick = () => { 
@@ -365,7 +396,6 @@
                 localData[currentEpisodeId] = localData[currentEpisodeId] || {};
                 localData[currentEpisodeId][type] = { start, end };
                 GM_setValue('cr_sync_data', localData); 
-                crLog(`Segment ${type} sauvegardé en local.`, "success", {start, end});
                 
                 document.getElementById('cr-start-in').value = '';
                 document.getElementById('cr-end-in').value = '';
@@ -375,11 +405,10 @@
                 updateMenuList(); drawHighlights();
 
                 if (GM_getValue('cr_bin_id', '') && GM_getValue('cr_api_key', '')) {
-                    status.innerText = "⏳ Envoi vers le Cloud...";
+                    status.innerText = t('cloudSend');
                     syncCloud("PUT", localData).then(() => {
-                        status.innerText = "✅ Synchro Cloud OK";
-                        crLog("Cloud mis à jour !", "success");
-                        setTimeout(() => { if(status && status.innerText === "✅ Synchro Cloud OK") status.innerText = ""; }, 3000);
+                        status.innerText = t('cloudSyncOk');
+                        setTimeout(() => { if(status && status.innerText === t('cloudSyncOk')) status.innerText = ""; }, 3000);
                     });
                 }
             };
@@ -388,7 +417,6 @@
             pullFromCloudBackground();
         }
 
-        // 3. CRÉATION DU GROS BOUTON SUR LE LECTEUR
         if (!document.getElementById('cr-skip-btn')) {
             const outer = document.createElement('div'); outer.className = 'kat:relative';
             const inner = document.createElement('div'); inner.className = 'kat:relative';
@@ -424,7 +452,6 @@
             btn.addEventListener('mousedown', block);
             inner.appendChild(btn); outer.appendChild(inner);
             
-            // Ciblage robuste et placement en 1ère position !
             let target = document.querySelector('[data-testid="settings-button"]') || 
                          document.querySelector('[data-testid="audio-and-subtitles-button"]') ||
                          document.querySelector('[data-testid="vilos-settings_menu"]');
@@ -438,7 +465,6 @@
                 while (target.parentElement && target.parentElement.classList.contains('kat:relative')) {
                     target = target.parentElement;
                 }
-                // On remonte au conteneur parent et on insère tout au début (firstChild)
                 if (target.parentElement) {
                     target.parentElement.insertBefore(outer, target.parentElement.firstChild);
                 }
@@ -449,26 +475,25 @@
     function updateMenuList() {
         const list = document.getElementById('cr-saved-list');
         if (!list) return;
-        list.innerHTML = `<div class="cr-saved-title">Segments sauvegardés :</div>`;
+        list.innerHTML = `<div class="cr-saved-title">${t('savedList')}</div>`;
         const data = localData[currentEpisodeId] || {};
         
         let hasData = false;
         Object.keys(data).forEach(type => {
             hasData = true;
             const item = document.createElement('div'); item.className = 'cr-saved-item';
-            item.innerHTML = `<span><b>${type.toUpperCase()}</b> ${secondsToTime(data[type].start)} - ${secondsToTime(data[type].end)}</span><button title="Supprimer">✖</button>`;
+            item.innerHTML = `<span><b>${type.toUpperCase()}</b> ${secondsToTime(data[type].start)} - ${secondsToTime(data[type].end)}</span><button title="${t('delete')}">✖</button>`;
             item.querySelector('button').onclick = () => {
                 delete localData[currentEpisodeId][type];
                 GM_setValue('cr_sync_data', localData);
                 updateMenuList(); drawHighlights();
-                crLog(`Segment ${type} supprimé en local.`, "warn");
                 
                 if (GM_getValue('cr_bin_id', '') && GM_getValue('cr_api_key', '')) {
                     const status = document.getElementById('cr-sync-text');
-                    if (status) status.innerText = "⏳ Suppression Cloud...";
+                    if (status) status.innerText = t('cloudDel');
                     syncCloud("PUT", localData).then(() => {
-                        if (status) status.innerText = "✅ Synchro Cloud OK";
-                        setTimeout(() => { if(status && status.innerText === "✅ Synchro Cloud OK") status.innerText = ""; }, 3000);
+                        if (status) status.innerText = t('cloudSyncOk');
+                        setTimeout(() => { if(status && status.innerText === t('cloudSyncOk')) status.innerText = ""; }, 3000);
                     });
                 }
             };
@@ -476,7 +501,7 @@
         });
         
         if (!hasData) {
-            list.innerHTML += `<div style="color: #666; padding-left: 5px;">Rien pour cet épisode.</div>`;
+            list.innerHTML += `<div style="color: #666; padding-left: 5px;">${t('emptyList')}</div>`;
         }
     }
 
@@ -491,7 +516,6 @@
     setInterval(() => {
         const id = getEpisodeId();
         
-        // SÉCURITÉ SPA : Si on n'est pas sur un épisode, on réinitialise l'état et on s'arrête
         if (!id) {
             currentEpisodeId = null;
             videoElement = null;
@@ -501,11 +525,8 @@
 
         if (id !== currentEpisodeId) {
             currentEpisodeId = id; 
-            crLog("Changement d'épisode détecté : " + id, "info");
-            
             hasAutoFilled = false;
             if (autoFillTimer) { clearTimeout(autoFillTimer); autoFillTimer = null; }
-            
             updateMenuList(); drawHighlights();
         }
         initMenuAndButton();
