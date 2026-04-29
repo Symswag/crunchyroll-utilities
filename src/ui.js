@@ -20,7 +20,7 @@ window.CRUtil.UI = {
 
     setStatus(msg) { const el = document.getElementById('cr-sync-text'); if (el) el.innerText = msg; },
 
-    buildMenu() {
+    buildMenu() {        
         if (document.getElementById('cr-skip-menu')) return;
         const menu = document.createElement('div');
         menu.id = 'cr-skip-menu';
@@ -59,6 +59,8 @@ window.CRUtil.UI = {
     },
 
     buildButton() {
+        window.CRUtil.Utils.log("build Button");
+
         if (document.getElementById('cr-skip-btn')) return;
         const btn = document.createElement('button');
         btn.id = 'cr-skip-btn';
@@ -78,7 +80,93 @@ window.CRUtil.UI = {
         }
     },
 
-    updateList() { /* ... Logique de liste habituelle ... */ },
-    drawHighlights() { /* ... Logique de barres habituelle ... */ },
-    resetAutoFill() { /* ... */ }
+    updateList() {
+        const list = document.getElementById('cr-saved-list');
+        if (!list) return;
+        
+        list.innerHTML = `<div class="cr-saved-title">Segments sauvegardés :</div>`;
+        
+        // Récupération des données via le DataManager
+        const epId = window.CRUtil.DataManager.getEpisodeId();
+        const data = window.CRUtil.DataManager.getEpisodeData(epId);
+        
+        let hasData = false;
+        
+        // Création des éléments pour chaque segment (intro, outro)
+        Object.keys(data).forEach(type => {
+            hasData = true;
+            const item = document.createElement('div'); 
+            item.className = 'cr-saved-item';
+            item.innerHTML = `
+                <span><b>${type.toUpperCase()}</b> ${window.CRUtil.Utils.secondsToTime(data[type].start)} - ${window.CRUtil.Utils.secondsToTime(data[type].end)}</span>
+                <button title="Supprimer ce segment">✖</button>
+            `;
+            
+            // Logique de suppression
+            item.querySelector('button').onclick = () => {
+                delete window.CRUtil.DataManager.localData[epId][type];
+                window.CRUtil.DataManager.saveLocalData();
+                this.updateList(); 
+                this.drawHighlights();
+                window.CRUtil.DataManager.pushToCloud();
+            };
+            
+            list.appendChild(item);
+        });
+
+        // Petit message s'il n'y a rien
+        if (!hasData) {
+            list.innerHTML += `<div style="color: #666; padding-left: 5px;">Rien pour cet épisode.</div>`;
+        }
+    },
+
+    drawHighlights() {
+        // Sécurité : vérifier que le lecteur vidéo est bien initialisé
+        if (!window.CRUtil.VideoPlayer || !window.CRUtil.VideoPlayer.element) return;
+        
+        // Ciblage de la barre de progression Crunchyroll
+        let sliderInput = document.querySelector('input.timeline-slider[type="range"]');
+        let seekBarContainer = sliderInput ? sliderInput.parentElement : null;
+        if (!seekBarContainer) return;
+
+        // Création ou nettoyage du calque qui va contenir nos couleurs
+        let overlay = document.getElementById('cr-progress-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'cr-progress-overlay';
+            seekBarContainer.appendChild(overlay);
+        } else {
+            overlay.innerHTML = '';
+        }
+
+        const epId = window.CRUtil.DataManager.getEpisodeId();
+        const data = window.CRUtil.DataManager.getEpisodeData(epId);
+        const duration = window.CRUtil.VideoPlayer.element.duration;
+        
+        // Si la vidéo n'est pas encore chargée (durée = 0 ou NaN), on s'arrête
+        if (isNaN(duration) || duration === 0) return;
+
+        // Dessin des barres de couleur selon les temps sauvegardés
+        ['intro', 'outro'].forEach(type => {
+            if (data[type]) {
+                const hl = document.createElement('div');
+                hl.className = `cr-highlight cr-hl-${type}`;
+                // Calcul du pourcentage de position et de largeur
+                hl.style.left = `${(data[type].start / duration) * 100}%`;
+                hl.style.width = `${((data[type].end - data[type].start) / duration) * 100}%`;
+                overlay.appendChild(hl);
+            }
+        });
+    },
+
+    resetAutoFill() {
+        // Déverrouille l'auto-remplissage
+        this.hasAutoFilled = false;
+        
+        // Coupe le chronomètre de 2 minutes s'il tournait encore
+        if (this.autoFillTimer) { 
+            clearTimeout(this.autoFillTimer); 
+            this.autoFillTimer = null; 
+        }
+    }
 };
