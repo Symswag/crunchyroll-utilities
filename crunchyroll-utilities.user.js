@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      6.0.1
+// @version      6.0.2
 // @description  Architecture modulaire sécurisée - Local-First & Cloud Sync.
 // @author       Symswag
 // @match        *://*.crunchyroll.com/watch/*
