@@ -59,9 +59,10 @@ window.CRUtil.UI = {
     },
 
     buildButton() {
+        if (document.getElementById('cr-skip-btn')) return;
+        
         window.CRUtil.Utils.log("build Button");
 
-        if (document.getElementById('cr-skip-btn')) return;
         const btn = document.createElement('button');
         btn.id = 'cr-skip-btn';
         btn.className = 'kat:flex kat:items-center kat:justify-center kat:h-44 kat:w-44 kat:opacity-75 kat:hover:opacity-100 kat:cursor-pointer';
