@@ -1,11 +1,10 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      5.1.1
-// @description  Couteau suisse pour Crunchyroll : Auto-Skip, Local-First, Cloud Sync Sécurisé & Menus Séparés.
+// @version      5.2
+// @description  Couteau suisse Crunchyroll : Fix navigation (SPA), Bouton 1ère position, Local-First & Cloud.
 // @author       Symswag
-// @match        *://*.crunchyroll.com/watch/*
-// @match        *://*.crunchyroll.com/*/watch/*
+// @match        *://*.crunchyroll.com/*
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_listValues
@@ -100,10 +99,7 @@
             GM_xmlhttpRequest({
                 method: method,
                 url: `https://api.jsonbin.io/v3/b/${binId}`,
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-Master-Key": apiKey
-                },
+                headers: { "Content-Type": "application/json", "X-Master-Key": apiKey },
                 data: data ? JSON.stringify(data) : null,
                 onload: (res) => {
                     try {
@@ -136,7 +132,7 @@
         const cloud = await syncCloud("GET");
         
         if (!cloud) {
-            if (statusEl) statusEl.innerText = "❌ Erreur de connexion Cloud (Vérifie tes clés)";
+            if (statusEl) statusEl.innerText = "❌ Erreur de connexion Cloud";
             return;
         }
 
@@ -147,7 +143,6 @@
             
         if (JSON.stringify(cloud) !== JSON.stringify(localData)) {
             crLog("Mise à jour Cloud détectée !", "info", cloud);
-            
             let needPush = false;
             GM_listValues().forEach(key => {
                 if (key.startsWith("cr_ep_")) {
@@ -166,9 +161,7 @@
                 if (statusEl) statusEl.innerText = "⏳ Envoi des anciens épisodes...";
                 await syncCloud("PUT", localData);
             }
-
-            updateMenuList(); 
-            drawHighlights();
+            updateMenuList(); drawHighlights();
         } else {
             crLog("La base locale est déjà à jour.", "success");
         }
@@ -196,6 +189,7 @@
     }
 
     function getEpisodeId() {
+        // Renvoie null si on n'est pas sur une page /watch/
         const match = window.location.pathname.match(/\/watch\/([^\/]+)/);
         return match ? match[1] : null;
     }
@@ -332,7 +326,7 @@
             playerContainer.appendChild(configMenu);
             configMenu.addEventListener('mousedown', stop); configMenu.addEventListener('click', stop);
 
-            // --- ÉVÉNEMENTS DE NAVIGATION ENTRE LES MENUS ---
+            // Événements de navigation
             document.getElementById('cr-close-menu').onclick = () => menu.style.display = 'none';
             document.getElementById('cr-open-config').onclick = () => {
                 menu.style.display = 'none';
@@ -343,21 +337,17 @@
                 menu.style.display = 'block';
             };
             
-            // --- LOGIQUE CONFIGURATION CLOUD ---
+            // Sauvegarde config
             document.getElementById('cr-save-keys').onclick = () => {
                 GM_setValue('cr_bin_id', document.getElementById('cr-bin-id').value.trim());
                 GM_setValue('cr_api_key', document.getElementById('cr-api-key').value.trim());
                 crLog("Clés Cloud sauvegardées en local.", "success");
-                
-                // Retour au menu principal
                 configMenu.style.display = 'none';
                 menu.style.display = 'block';
-                
-                // On relance la vérification avec les nouvelles clés
                 pullFromCloudBackground();
             };
 
-            // --- LOGIQUE MAIN MENU ---
+            // Actions principales
             document.getElementById('cr-auto-skip-cb').onchange = (e) => { autoSkipEnabled = e.target.checked; GM_setValue('cr_auto_skip', autoSkipEnabled); };
             
             document.getElementById('cr-get-start').onclick = () => { 
@@ -372,7 +362,6 @@
                 const start = timeToSeconds(document.getElementById('cr-start-in').value);
                 const end = timeToSeconds(document.getElementById('cr-end-in').value);
                 
-                // MISE À JOUR LOCALE INSTANTANÉE
                 localData[currentEpisodeId] = localData[currentEpisodeId] || {};
                 localData[currentEpisodeId][type] = { start, end };
                 GM_setValue('cr_sync_data', localData); 
@@ -383,13 +372,10 @@
                 hasAutoFilled = false;
                 if (autoFillTimer) { clearTimeout(autoFillTimer); autoFillTimer = null; }
 
-                updateMenuList(); 
-                drawHighlights();
+                updateMenuList(); drawHighlights();
 
-                // ENVOI AU CLOUD EN ARRIÈRE-PLAN
                 if (GM_getValue('cr_bin_id', '') && GM_getValue('cr_api_key', '')) {
                     status.innerText = "⏳ Envoi vers le Cloud...";
-                    crLog("Envoi de la mise à jour vers le Cloud...", "cloud");
                     syncCloud("PUT", localData).then(() => {
                         status.innerText = "✅ Synchro Cloud OK";
                         crLog("Cloud mis à jour !", "success");
@@ -417,7 +403,6 @@
                 const menu = document.getElementById('cr-skip-menu');
                 const configMenu = document.getElementById('cr-config-menu');
                 
-                // Si l'un des deux menus est ouvert, on le ferme. Sinon, on ouvre le menu principal.
                 const isAnyMenuOpen = menu.style.display === 'block' || configMenu.style.display === 'block';
                 
                 if (isAnyMenuOpen) {
@@ -425,7 +410,6 @@
                     configMenu.style.display = 'none';
                 } else {
                     menu.style.display = 'block';
-                    
                     if (videoElement && !hasAutoFilled) {
                         document.getElementById('cr-type-sel').value = videoElement.currentTime > (videoElement.duration/2) ? 'outro' : 'intro';
                         document.getElementById('cr-start-in').value = secondsToTime(videoElement.currentTime);
@@ -440,7 +424,7 @@
             btn.addEventListener('mousedown', block);
             inner.appendChild(btn); outer.appendChild(inner);
             
-            // Ciblage robuste officiel Crunchyroll
+            // Ciblage robuste et placement en 1ère position !
             let target = document.querySelector('[data-testid="settings-button"]') || 
                          document.querySelector('[data-testid="audio-and-subtitles-button"]') ||
                          document.querySelector('[data-testid="vilos-settings_menu"]');
@@ -451,11 +435,10 @@
             }
             
             if (target) {
-                // On remonte au conteneur principal (le groupe de boutons de droite)
                 while (target.parentElement && target.parentElement.classList.contains('kat:relative')) {
                     target = target.parentElement;
                 }
-                // On insère notre bouton en TOUT PREMIER dans ce conteneur
+                // On remonte au conteneur parent et on insère tout au début (firstChild)
                 if (target.parentElement) {
                     target.parentElement.insertBefore(outer, target.parentElement.firstChild);
                 }
@@ -477,8 +460,7 @@
             item.querySelector('button').onclick = () => {
                 delete localData[currentEpisodeId][type];
                 GM_setValue('cr_sync_data', localData);
-                updateMenuList(); 
-                drawHighlights();
+                updateMenuList(); drawHighlights();
                 crLog(`Segment ${type} supprimé en local.`, "warn");
                 
                 if (GM_getValue('cr_bin_id', '') && GM_getValue('cr_api_key', '')) {
@@ -508,7 +490,16 @@
 
     setInterval(() => {
         const id = getEpisodeId();
-        if (id && id !== currentEpisodeId) {
+        
+        // SÉCURITÉ SPA : Si on n'est pas sur un épisode, on réinitialise l'état et on s'arrête
+        if (!id) {
+            currentEpisodeId = null;
+            videoElement = null;
+            playerContainer = null;
+            return;
+        }
+
+        if (id !== currentEpisodeId) {
             currentEpisodeId = id; 
             crLog("Changement d'épisode détecté : " + id, "info");
             
