@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      6.1
-// @description  Couteau suisse Crunchyroll : Auto-Skip, Cloud Sync, Multilingue (FR/EN) & Limites Temps Max.
+// @version      6.3
+// @description  Couteau suisse Crunchyroll : Auto-Skip, Cloud Sync, Multilingue (FR/EN) & UI avec SVG natifs.
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
 // @grant        GM_setValue
@@ -34,6 +34,7 @@
             delete: "Supprimer",
             verify: "Vérification...",
             currTime: "Temps actuel",
+            zeroTime: "Début de l'épisode",
             maxTime: "Fin de l'épisode",
             errMissing: "⚠️ Clés Cloud manquantes (⚙️)",
             errConn: "❌ Erreur de connexion Cloud",
@@ -59,6 +60,7 @@
             delete: "Delete",
             verify: "Verifying...",
             currTime: "Current time",
+            zeroTime: "Start of episode",
             maxTime: "End of episode",
             errMissing: "⚠️ Missing Cloud Keys (⚙️)",
             errConn: "❌ Cloud Connection Error",
@@ -117,12 +119,16 @@
         #cr-close-menu, #cr-close-config { font-size: 18px; line-height: 1; }
         .cr-row { margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
         .cr-row label { color: #ddd; display: flex; align-items: center; gap: 8px; cursor: pointer; }
-        .cr-input-group { display: flex; align-items: center; gap: 3px; }
+        .cr-input-group { display: flex; align-items: center; gap: 5px; }
         .cr-row input[type="text"] { width: 75px; background: #2a2c33; color: #fff; border: 1px solid #444; padding: 6px; border-radius: 4px; text-align: center; font-family: monospace; }
         .cr-row input[type="text"]:focus { border-color: #f47521; outline: none; }
         .cr-row select { background: #2a2c33; color: #fff; border: 1px solid #444; padding: 6px; border-radius: 4px; width: 100px; cursor: pointer; }
-        .cr-btn-time { background: transparent; color: #f47521; border: 1px solid rgba(244,117,33,0.3); padding: 5px 6px; cursor: pointer; border-radius: 4px; font-size: 13px; transition: background 0.2s; }
+        
+        /* Modifs des boutons temps pour accueillir les SVG */
+        .cr-btn-time { background: transparent; color: #f47521; border: 1px solid rgba(244,117,33,0.3); padding: 5px; cursor: pointer; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
         .cr-btn-time:hover { background: rgba(244,117,33,0.1); border-color: rgba(244,117,33,0.6); }
+        .cr-btn-time svg { width: 16px; height: 16px; }
+        
         .cr-btn-save { background: #f47521; color: white; border: none; width: 100%; padding: 10px; margin-top: 10px; font-weight: bold; cursor: pointer; border-radius: 4px; text-transform: uppercase; font-size: 13px; transition: background 0.2s; }
         .cr-btn-save:hover { background: #df6210; }
         .cr-input-full { background: #1e1f23; color: #aaa; border: 1px solid #333; padding: 8px; border-radius: 4px; width: 100%; font-family: monospace; font-size: 12px; margin-bottom: 8px; box-sizing: border-box; }
@@ -297,9 +303,14 @@
         });
     }
 
+    // --- SVGs ---
     const CR_GEAR_PATH = `M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.05-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.12.56-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.73 8.87c-.11.2-.06.47.12.61l2.03 1.58c-.04.3-.06.62-.06.94s.02.64.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .43-.17.47-.41l.36-2.54c.59-.24 1.12-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.11-.2.06-.47-.12-.61l-2.03-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z`;
     const CR_GEAR_SVG_MAIN = `<svg viewBox="0 0 24 24" fill="currentColor" class="kat:w-24 kat:h-24 kat:@lg:w-40 kat:@lg:h-40 kat:shrink-0"><path d="${CR_GEAR_PATH}"/></svg>`;
     const CR_GEAR_SVG_MINI = `<svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;"><path d="${CR_GEAR_PATH}"/></svg>`;
+    
+    const CR_CLOCK_SVG = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>`;
+    const CR_START_SVG = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>`;
+    const CR_END_SVG = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>`;
 
     function initMenuAndButton() {
         videoElement = document.querySelector('video');
@@ -330,8 +341,19 @@
                 <div class="cr-row"><label><input type="checkbox" id="cr-auto-skip-cb" ${autoSkipEnabled ? 'checked' : ''}> ${t('autoSkip')}</label></div>
                 <hr style="border-color: rgba(255,255,255,0.05); margin: 12px 0;">
                 <div class="cr-row"><label>${t('type')}</label><select id="cr-type-sel"><option value="intro">Intro</option><option value="outro">Outro</option></select></div>
-                <div class="cr-row"><label>${t('start')}</label><div class="cr-input-group"><input type="text" id="cr-start-in" placeholder="00:00"><button class="cr-btn-time" id="cr-get-start" title="${t('currTime')}">⏱️</button></div></div>
-                <div class="cr-row"><label>${t('end')}</label><div class="cr-input-group"><input type="text" id="cr-end-in" placeholder="01:30"><button class="cr-btn-time" id="cr-get-end" title="${t('currTime')}">⏱️</button><button class="cr-btn-time" id="cr-get-max" title="${t('maxTime')}">⏭️</button></div></div>
+                
+                <div class="cr-row"><label>${t('start')}</label><div class="cr-input-group">
+                    <input type="text" id="cr-start-in" placeholder="00:00">
+                    <button class="cr-btn-time" id="cr-get-start" title="${t('currTime')}">${CR_CLOCK_SVG}</button>
+                    <button class="cr-btn-time" id="cr-get-start-zero" title="${t('zeroTime')}">${CR_START_SVG}</button>
+                </div></div>
+                
+                <div class="cr-row"><label>${t('end')}</label><div class="cr-input-group">
+                    <input type="text" id="cr-end-in" placeholder="01:30">
+                    <button class="cr-btn-time" id="cr-get-end" title="${t('currTime')}">${CR_CLOCK_SVG}</button>
+                    <button class="cr-btn-time" id="cr-get-max" title="${t('maxTime')}">${CR_END_SVG}</button>
+                </div></div>
+                
                 <button class="cr-btn-save" id="cr-save-btn">${t('saveBtn')}</button>
                 <div id="cr-saved-list"></div>
                 <div class="cr-sync-status" id="cr-sync-text">${t('verify')}</div>
@@ -381,13 +403,18 @@
 
             document.getElementById('cr-auto-skip-cb').onchange = (e) => { autoSkipEnabled = e.target.checked; GM_setValue('cr_auto_skip', autoSkipEnabled); };
             
-            // Logique bouton START (remplit le début, puis estime la fin sans dépasser)
+            // Logique bouton START (Temps actuel + estimation de fin)
             document.getElementById('cr-get-start').onclick = () => { 
                 document.getElementById('cr-start-in').value = secondsToTime(videoElement.currentTime);
                 const maxDur = videoElement.duration || 0;
                 let predictedEnd = videoElement.currentTime + INTRO_OUTRO_LENGTH;
                 if (predictedEnd > maxDur) predictedEnd = maxDur;
                 document.getElementById('cr-end-in').value = secondsToTime(predictedEnd);
+            };
+
+            // Logique bouton START ZERO (00:00)
+            document.getElementById('cr-get-start-zero').onclick = () => {
+                document.getElementById('cr-start-in').value = "00:00";
             };
 
             // Logique bouton END (Temps actuel)
