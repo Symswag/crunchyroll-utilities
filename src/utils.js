@@ -1,5 +1,4 @@
 window.CRUtil = window.CRUtil || {};
-
 window.CRUtil.Utils = {
     timeToSeconds(timeStr) {
         if (!timeStr) return 0;
