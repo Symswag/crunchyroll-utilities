@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      6.0.2
+// @version      6.0.3
 // @description  Architecture modulaire sécurisée - Local-First & Cloud Sync.
 // @author       Symswag
 // @match        *://*.crunchyroll.com/watch/*
@@ -30,6 +30,8 @@
         console.error("[CR Utilities] Erreur : Les modules externes ne se sont pas chargés correctement.");
         return;
     }
+
+    console.log("[CR Utilities] Load OK !");
 
     // 1. On injecte le CSS immédiatement
     CR.UI.injectCSS();
