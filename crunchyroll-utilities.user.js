@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      6.0
+// @version      6.0.1
 // @description  Couteau suisse Crunchyroll : Auto-Skip, Cloud Sync & Multilingue (FR/EN).
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
