@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      6.3
-// @description  Couteau suisse Crunchyroll : Auto-Skip, Cloud Sync, Multilingue (FR/EN) & UI avec SVG natifs.
+// @version      6.7
+// @description  Couteau suisse Crunchyroll : Auto-Skip, Cloud Sync, Multilingue & Ciblages UI mis à jour.
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
 // @grant        GM_setValue
@@ -119,16 +119,13 @@
         #cr-close-menu, #cr-close-config { font-size: 18px; line-height: 1; }
         .cr-row { margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
         .cr-row label { color: #ddd; display: flex; align-items: center; gap: 8px; cursor: pointer; }
-        .cr-input-group { display: flex; align-items: center; gap: 5px; }
+        .cr-input-group { display: flex; align-items: center; gap: 3px; }
         .cr-row input[type="text"] { width: 75px; background: #2a2c33; color: #fff; border: 1px solid #444; padding: 6px; border-radius: 4px; text-align: center; font-family: monospace; }
         .cr-row input[type="text"]:focus { border-color: #f47521; outline: none; }
         .cr-row select { background: #2a2c33; color: #fff; border: 1px solid #444; padding: 6px; border-radius: 4px; width: 100px; cursor: pointer; }
-        
-        /* Modifs des boutons temps pour accueillir les SVG */
-        .cr-btn-time { background: transparent; color: #f47521; border: 1px solid rgba(244,117,33,0.3); padding: 5px; cursor: pointer; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+        .cr-btn-time { background: transparent; color: #f47521; border: 1px solid rgba(244,117,33,0.3); padding: 5px 6px; cursor: pointer; border-radius: 4px; font-size: 13px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
         .cr-btn-time:hover { background: rgba(244,117,33,0.1); border-color: rgba(244,117,33,0.6); }
         .cr-btn-time svg { width: 16px; height: 16px; }
-        
         .cr-btn-save { background: #f47521; color: white; border: none; width: 100%; padding: 10px; margin-top: 10px; font-weight: bold; cursor: pointer; border-radius: 4px; text-transform: uppercase; font-size: 13px; transition: background 0.2s; }
         .cr-btn-save:hover { background: #df6210; }
         .cr-input-full { background: #1e1f23; color: #aaa; border: 1px solid #333; padding: 8px; border-radius: 4px; width: 100%; font-family: monospace; font-size: 12px; margin-bottom: 8px; box-sizing: border-box; }
@@ -303,7 +300,6 @@
         });
     }
 
-    // --- SVGs ---
     const CR_GEAR_PATH = `M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.05-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.12.56-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.73 8.87c-.11.2-.06.47.12.61l2.03 1.58c-.04.3-.06.62-.06.94s.02.64.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .43-.17.47-.41l.36-2.54c.59-.24 1.12-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.11-.2.06-.47-.12-.61l-2.03-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z`;
     const CR_GEAR_SVG_MAIN = `<svg viewBox="0 0 24 24" fill="currentColor" class="kat:w-24 kat:h-24 kat:@lg:w-40 kat:@lg:h-40 kat:shrink-0"><path d="${CR_GEAR_PATH}"/></svg>`;
     const CR_GEAR_SVG_MINI = `<svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;"><path d="${CR_GEAR_PATH}"/></svg>`;
@@ -403,7 +399,6 @@
 
             document.getElementById('cr-auto-skip-cb').onchange = (e) => { autoSkipEnabled = e.target.checked; GM_setValue('cr_auto_skip', autoSkipEnabled); };
             
-            // Logique bouton START (Temps actuel + estimation de fin)
             document.getElementById('cr-get-start').onclick = () => { 
                 document.getElementById('cr-start-in').value = secondsToTime(videoElement.currentTime);
                 const maxDur = videoElement.duration || 0;
@@ -412,17 +407,14 @@
                 document.getElementById('cr-end-in').value = secondsToTime(predictedEnd);
             };
 
-            // Logique bouton START ZERO (00:00)
             document.getElementById('cr-get-start-zero').onclick = () => {
                 document.getElementById('cr-start-in').value = "00:00";
             };
 
-            // Logique bouton END (Temps actuel)
             document.getElementById('cr-get-end').onclick = () => {
                 document.getElementById('cr-end-in').value = secondsToTime(videoElement.currentTime);
             };
 
-            // Logique bouton END MAX (Aller au bout)
             document.getElementById('cr-get-max').onclick = () => {
                 if (videoElement && videoElement.duration) {
                     document.getElementById('cr-end-in').value = secondsToTime(videoElement.duration);
@@ -435,7 +427,6 @@
                 const start = timeToSeconds(document.getElementById('cr-start-in').value);
                 let end = timeToSeconds(document.getElementById('cr-end-in').value);
                 
-                // SÉCURITÉ : Ne jamais dépasser le temps max à la sauvegarde
                 const maxDur = videoElement ? videoElement.duration : Infinity;
                 if (end > maxDur) {
                     end = maxDur;
@@ -466,7 +457,11 @@
         }
 
         if (!document.getElementById('cr-skip-btn')) {
-            const outer = document.createElement('div'); outer.className = 'kat:relative';
+            const outer = document.createElement('div'); 
+            outer.className = 'kat:relative';
+            outer.style.display = 'flex';
+            outer.style.alignItems = 'center';
+            
             const inner = document.createElement('div'); inner.className = 'kat:relative';
             const btn = document.createElement('button');
             btn.id = 'cr-skip-btn'; btn.type = 'button'; btn.title = "CR Utilities";
@@ -490,7 +485,6 @@
                         document.getElementById('cr-type-sel').value = videoElement.currentTime > (videoElement.duration/2) ? 'outro' : 'intro';
                         document.getElementById('cr-start-in').value = secondsToTime(videoElement.currentTime);
                         
-                        // SÉCURITÉ : Ne pas dépasser le temps max lors du remplissage automatique
                         const maxDur = videoElement.duration || 0;
                         let predictedEnd = videoElement.currentTime + INTRO_OUTRO_LENGTH;
                         if (predictedEnd > maxDur) predictedEnd = maxDur;
@@ -505,21 +499,28 @@
             btn.addEventListener('mousedown', block);
             inner.appendChild(btn); outer.appendChild(inner);
             
-            let target = document.querySelector('[data-testid="settings-button"]') || 
-                         document.querySelector('[data-testid="audio-and-subtitles-button"]') ||
-                         document.querySelector('[data-testid="vilos-settings_menu"]');
+            let target = document.querySelector('[data-testid="track-selection-button"]') || 
+                         document.querySelector('[data-testid="playback-speed-button"]') ||
+                         document.querySelector('[data-testid="next-episode-icon"]') ||
+                         document.querySelector('[data-testid="settings-button"]') || 
+                         document.querySelector('[data-testid="audio-and-subtitles-button"]');
             
             if (!target && playerContainer) {
-                const all = Array.from(playerContainer.querySelectorAll('svg'));
+                const all = Array.from(playerContainer.querySelectorAll('svg')).filter(svg => !svg.closest('#cr-skip-menu, #cr-config-menu, #cr-skip-btn'));
                 target = all.length > 2 ? all[all.length - 2].closest('button, [role="button"]') : null;
             }
             
             if (target) {
-                while (target.parentElement && target.parentElement.classList.contains('kat:relative')) {
-                    target = target.parentElement;
+                let btnGroup = target.parentElement;
+                
+                while (btnGroup && btnGroup.children.length < 2 && btnGroup.tagName !== 'BODY') {
+                    btnGroup = btnGroup.parentElement;
                 }
-                if (target.parentElement) {
-                    target.parentElement.insertBefore(outer, target.parentElement.firstChild);
+                
+                if (btnGroup) {
+                    btnGroup.insertBefore(outer, btnGroup.firstChild);
+                } else {
+                    target.parentElement.insertBefore(outer, target);
                 }
             }
         }
