@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      5.1
+// @version      5.1.1
 // @description  Couteau suisse pour Crunchyroll : Auto-Skip, Local-First, Cloud Sync Sécurisé & Menus Séparés.
 // @author       Symswag
 // @match        *://*.crunchyroll.com/watch/*
@@ -451,11 +451,13 @@
             }
             
             if (target) {
+                // On remonte au conteneur principal (le groupe de boutons de droite)
                 while (target.parentElement && target.parentElement.classList.contains('kat:relative')) {
                     target = target.parentElement;
                 }
+                // On insère notre bouton en TOUT PREMIER dans ce conteneur
                 if (target.parentElement) {
-                    target.parentElement.insertBefore(outer, target);
+                    target.parentElement.insertBefore(outer, target.parentElement.firstChild);
                 }
             }
         }
