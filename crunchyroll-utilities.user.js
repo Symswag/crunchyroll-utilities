@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      6.7
-// @description  Couteau suisse Crunchyroll : Auto-Skip, Cloud Sync, Multilingue & Ciblages UI mis à jour.
+// @version      6.8
+// @description  Couteau suisse Crunchyroll : Types de segments multiples (Recap, Preview) & Skips à la carte.
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
 // @grant        GM_setValue
@@ -24,7 +24,7 @@
             configTitle: "☁️ Configuration Cloud",
             configDesc: "Entrez vos identifiants JSONBin.io pour synchroniser vos skips entre vos appareils.",
             saveKeys: "Sauvegarder & Retour",
-            autoSkip: "Activer Auto Skip",
+            autoSkip: "Skips automatiques :",
             type: "Type :",
             start: "Début :",
             end: "Fin :",
@@ -50,7 +50,7 @@
             configTitle: "☁️ Cloud Config",
             configDesc: "Enter your JSONBin.io credentials to sync your skips across devices.",
             saveKeys: "Save & Return",
-            autoSkip: "Enable Auto Skip",
+            autoSkip: "Auto-Skips:",
             type: "Type:",
             start: "Start:",
             end: "End:",
@@ -85,7 +85,10 @@
     let videoElement = null;
     let playerContainer = null;
     let currentEpisodeId = null;
-    let autoSkipEnabled = GM_getValue('cr_auto_skip', true);
+    
+    // NOUVEAU : Sauvegarde granulaire (on active/désactive chaque type indépendamment)
+    let skipTypesEnabled = GM_getValue('cr_skip_types', { intro: true, outro: true, recap: true, preview: true });
+    
     let isSkipping = false;
     let hasAutoFilled = false;
     let autoFillTimer = null;
@@ -137,10 +140,19 @@
         .cr-saved-item b { color: #f47521; }
         .cr-saved-item button { background: rgba(217, 83, 79, 0.1); border: 1px solid rgba(217, 83, 79, 0.3); color: #d9534f; border-radius: 4px; cursor: pointer; padding: 4px 8px; font-size: 11px; transition: all 0.2s; }
         .cr-saved-item button:hover { background: rgba(217, 83, 79, 0.2); border-color: rgba(217, 83, 79, 0.5); }
+        
+        .cr-types-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; font-size: 12px; }
+        .cr-types-grid label { background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px; cursor: pointer; transition: background 0.2s; }
+        .cr-types-grid label:hover { background: rgba(255,255,255,0.1); }
+        .cr-types-grid input { margin-right: 5px; cursor: pointer; accent-color: #f47521; }
+
         #cr-progress-overlay { position: absolute; left: 0; width: 100%; top: 50%; transform: translateY(-50%); height: 4px; pointer-events: none; z-index: 10; }
         .cr-highlight { position: absolute; height: 100%; opacity: 0.9; border-radius: 2px; }
         .cr-hl-intro { background-color: #28a745; }
         .cr-hl-outro { background-color: #dc3545; }
+        .cr-hl-recap { background-color: #ffc107; }  /* Jaune pour recap */
+        .cr-hl-preview { background-color: #007bff; } /* Bleu pour preview */
+        
         #cr-skip-btn:hover svg { fill: #f47521; }
         .cr-sync-status { font-size: 10px; text-align: center; margin-top: 10px; opacity: 0.5; color: #aaa; }
     `);
@@ -238,8 +250,9 @@
         return match ? match[1] : null;
     }
 
+    // --- Cerveau dynamique : Gère N types de segments ---
     function handleTimeUpdate() {
-        if (!autoSkipEnabled || !videoElement || isSkipping) return;
+        if (!videoElement || isSkipping) return;
         
         const data = localData[currentEpisodeId] || {}; 
         const currentTime = videoElement.currentTime;
@@ -260,13 +273,19 @@
             setTimeout(() => { isSkipping = false; }, 1000);
         };
 
-        if (data.intro && currentTime >= data.intro.start && currentTime < data.intro.end - 0.5) {
-            jumpToTime(data.intro.end);
-        }
-        else if (data.outro && currentTime >= data.outro.start && currentTime < data.outro.end - 0.5) {
-            let targetOutroTime = data.outro.end;
-            if (!isNaN(duration) && targetOutroTime > duration - 2) targetOutroTime = duration - 2; 
-            if (currentTime < targetOutroTime) jumpToTime(targetOutroTime);
+        // On vérifie tous les segments sauvegardés
+        for (const [type, segment] of Object.entries(data)) {
+            // Si le type est désactivé dans les réglages, on l'ignore
+            if (!skipTypesEnabled[type]) continue; 
+
+            // Si on est dans le temps du segment
+            if (currentTime >= segment.start && currentTime < segment.end - 0.5) {
+                let targetTime = segment.end;
+                // Sécurité pour les segments qui touchent la fin de l'épisode (Outro, Preview)
+                if (!isNaN(duration) && targetTime > duration - 2) targetTime = duration - 2; 
+                jumpToTime(targetTime);
+                break; // On a trouvé un skip, on s'arrête là pour ce cycle
+            }
         }
     }
 
@@ -289,7 +308,7 @@
         const data = localData[currentEpisodeId] || {}; 
         const duration = videoElement.duration;
 
-        ['intro', 'outro'].forEach(type => {
+        ['intro', 'outro', 'recap', 'preview'].forEach(type => {
             if (data[type]) {
                 const hl = document.createElement('div');
                 hl.className = `cr-highlight cr-hl-${type}`;
@@ -334,9 +353,28 @@
                         <button class="cr-icon-btn" id="cr-close-menu">✖</button>
                     </div>
                 </div>
-                <div class="cr-row"><label><input type="checkbox" id="cr-auto-skip-cb" ${autoSkipEnabled ? 'checked' : ''}> ${t('autoSkip')}</label></div>
+                
+                <!-- NOUVEAU : Grille d'activation par type -->
+                <div style="font-size: 13px; color: #ddd; margin-bottom: 8px;"><b>${t('autoSkip')}</b></div>
+                <div class="cr-types-grid">
+                    <label><input type="checkbox" class="cr-cb-type" value="intro" ${skipTypesEnabled.intro ? 'checked' : ''}> Intro</label>
+                    <label><input type="checkbox" class="cr-cb-type" value="outro" ${skipTypesEnabled.outro ? 'checked' : ''}> Outro</label>
+                    <label><input type="checkbox" class="cr-cb-type" value="recap" ${skipTypesEnabled.recap ? 'checked' : ''}> Recap</label>
+                    <label><input type="checkbox" class="cr-cb-type" value="preview" ${skipTypesEnabled.preview ? 'checked' : ''}> Preview</label>
+                </div>
+
                 <hr style="border-color: rgba(255,255,255,0.05); margin: 12px 0;">
-                <div class="cr-row"><label>${t('type')}</label><select id="cr-type-sel"><option value="intro">Intro</option><option value="outro">Outro</option></select></div>
+                
+                <!-- MENU DÉROULANT MIS À JOUR -->
+                <div class="cr-row">
+                    <label>${t('type')}</label>
+                    <select id="cr-type-sel">
+                        <option value="intro">Intro</option>
+                        <option value="outro">Outro</option>
+                        <option value="recap">Recap</option>
+                        <option value="preview">Preview</option>
+                    </select>
+                </div>
                 
                 <div class="cr-row"><label>${t('start')}</label><div class="cr-input-group">
                     <input type="text" id="cr-start-in" placeholder="00:00">
@@ -356,6 +394,14 @@
             `;
             playerContainer.appendChild(menu);
             menu.addEventListener('mousedown', stop); menu.addEventListener('click', stop);
+
+            // Gérer les cases à cocher granulaires
+            document.querySelectorAll('.cr-cb-type').forEach(cb => {
+                cb.onchange = (e) => {
+                    skipTypesEnabled[e.target.value] = e.target.checked;
+                    GM_setValue('cr_skip_types', skipTypesEnabled);
+                };
+            });
 
             const configMenu = document.createElement('div');
             configMenu.id = 'cr-config-menu';
@@ -396,8 +442,6 @@
                 menu.style.display = 'block';
                 pullFromCloudBackground();
             };
-
-            document.getElementById('cr-auto-skip-cb').onchange = (e) => { autoSkipEnabled = e.target.checked; GM_setValue('cr_auto_skip', autoSkipEnabled); };
             
             document.getElementById('cr-get-start').onclick = () => { 
                 document.getElementById('cr-start-in').value = secondsToTime(videoElement.currentTime);
@@ -482,7 +526,14 @@
                 } else {
                     menu.style.display = 'block';
                     if (videoElement && !hasAutoFilled) {
-                        document.getElementById('cr-type-sel').value = videoElement.currentTime > (videoElement.duration/2) ? 'outro' : 'intro';
+                        // Petit ajustement de l'auto-remplissage : on devine Intro, Recap, Outro ou Preview selon le temps.
+                        const ratio = videoElement.currentTime / videoElement.duration;
+                        let guessType = 'intro';
+                        if (ratio > 0.8) guessType = 'outro'; // Fin de l'épisode (Outro)
+                        if (ratio > 0.95) guessType = 'preview'; // Toute fin de l'épisode (Preview)
+                        if (ratio < 0.1 && videoElement.currentTime > 60) guessType = 'recap'; // Début de l'épisode mais pas à 0:00 (Recap)
+
+                        document.getElementById('cr-type-sel').value = guessType;
                         document.getElementById('cr-start-in').value = secondsToTime(videoElement.currentTime);
                         
                         const maxDur = videoElement.duration || 0;
@@ -536,7 +587,13 @@
         Object.keys(data).forEach(type => {
             hasData = true;
             const item = document.createElement('div'); item.className = 'cr-saved-item';
-            item.innerHTML = `<span><b>${type.toUpperCase()}</b> ${secondsToTime(data[type].start)} - ${secondsToTime(data[type].end)}</span><button title="${t('delete')}">✖</button>`;
+            // Le nom du type dans la liste reprendra maintenant la bonne couleur selon sa catégorie
+            let color = '#f47521'; // Intro/Defaut
+            if (type === 'outro') color = '#dc3545';
+            if (type === 'recap') color = '#ffc107';
+            if (type === 'preview') color = '#007bff';
+
+            item.innerHTML = `<span><b style="color:${color};">${type.toUpperCase()}</b> ${secondsToTime(data[type].start)} - ${secondsToTime(data[type].end)}</span><button title="${t('delete')}">✖</button>`;
             item.querySelector('button').onclick = () => {
                 delete localData[currentEpisodeId][type];
                 GM_setValue('cr_sync_data', localData);
