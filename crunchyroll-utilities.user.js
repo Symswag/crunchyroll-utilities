@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      6.8
+// @version      6.8.1
 // @description  Couteau suisse Crunchyroll : Types de segments multiples (Recap, Preview) & Skips à la carte.
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
@@ -283,7 +283,7 @@
                 let targetTime = segment.end;
                 // Sécurité pour les segments qui touchent la fin de l'épisode (Outro, Preview)
                 if (!isNaN(duration) && targetTime > duration - 2) targetTime = duration - 2; 
-                jumpToTime(targetTime);
+                if (currentTime < targetTime) jumpToTime(targetTime);
                 break; // On a trouvé un skip, on s'arrête là pour ce cycle
             }
         }
