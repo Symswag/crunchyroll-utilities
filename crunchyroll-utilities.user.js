@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      6.8.1
+// @version      6.8.2
 // @description  Couteau suisse Crunchyroll : Types de segments multiples (Recap, Preview) & Skips à la carte.
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=crunchyroll.com
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_listValues
