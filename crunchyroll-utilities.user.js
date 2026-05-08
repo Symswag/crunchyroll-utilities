@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      6.14
-// @description  Couteau suisse Crunchyroll : Types multiples, Ajout Rapide & Raccourci Play/Pause global.
+// @version      6.15
+// @description  Couteau suisse Crunchyroll : Ajout des raccourcis Plein Écran forcé et Rechargement du flux.
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=crunchyroll.com
@@ -53,6 +53,8 @@
             addOutro: "Ajout rapide Outro",
             openMenu: "Ouvrir le menu",
             togglePlay: "Lecture / Pause",
+            toggleFullscreen: "Plein écran",
+            reloadStream: "Recharger la vidéo",
             pressKey: "Appuyez...",
             unassigned: "Non assigné"
         },
@@ -88,6 +90,8 @@
             addOutro: "Quick add Outro",
             openMenu: "Open menu",
             togglePlay: "Play / Pause",
+            toggleFullscreen: "Toggle Fullscreen",
+            reloadStream: "Reload Stream",
             pressKey: "Press...",
             unassigned: "Unassigned"
         }
@@ -115,7 +119,9 @@
     if (!hotkeysConfig.openIntro) hotkeysConfig.openIntro = { key: 'KeyI' };
     if (!hotkeysConfig.openOutro) hotkeysConfig.openOutro = { key: 'KeyO' };
     if (!hotkeysConfig.openMenu) hotkeysConfig.openMenu = { key: 'KeyM' }; 
-    if (!hotkeysConfig.togglePlay) hotkeysConfig.togglePlay = { key: 'Space' }; // NOUVEAU RACCOURCI PLAY/PAUSE
+    if (!hotkeysConfig.togglePlay) hotkeysConfig.togglePlay = { key: 'Space' }; 
+    if (!hotkeysConfig.toggleFullscreen) hotkeysConfig.toggleFullscreen = { key: 'KeyF' }; // NOUVEAU
+    if (!hotkeysConfig.reloadStream) hotkeysConfig.reloadStream = { key: 'KeyR' }; // NOUVEAU
     
     let isSkipping = false;
     let hasAutoFilled = false;
@@ -358,15 +364,32 @@
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
         if (!videoElement) return;
 
-        // Force Play/Pause (empêche le scroll si touche Espace)
+        // Lecture / Pause
         if (e.code === hotkeysConfig.togglePlay.key) {
             e.preventDefault(); 
             e.stopPropagation();
-            if (videoElement.paused) {
-                videoElement.play();
+            if (videoElement.paused) videoElement.play();
+            else videoElement.pause();
+            return;
+        }
+
+        // Plein écran
+        if (e.code === hotkeysConfig.toggleFullscreen.key) {
+            e.preventDefault(); e.stopPropagation();
+            if (!document.fullscreenElement) {
+                const player = document.querySelector('.video-player') || playerContainer || document.documentElement;
+                if (player.requestFullscreen) player.requestFullscreen();
             } else {
-                videoElement.pause();
+                if (document.exitFullscreen) document.exitFullscreen();
             }
+            return;
+        }
+
+        // Recharger le flux
+        if (e.code === hotkeysConfig.reloadStream.key) {
+            e.preventDefault(); e.stopPropagation();
+            // Fait un micro-saut pour forcer le lecteur à rafraichir son buffer
+            forceJumpToTime(videoElement.currentTime + 0.001);
             return;
         }
 
@@ -456,6 +479,14 @@
             <div class="cr-hk-row" style="margin-bottom: 4px; background: transparent;">
                 <label style="color:#aaa; font-size:12px;">${t('togglePlay')}</label>
                 <button class="cr-btn-time cr-hk-btn cr-hk-single" data-action="togglePlay" title="Modifier la touche">${formatKeyDisplay(hotkeysConfig.togglePlay.key)}</button>
+            </div>
+            <div class="cr-hk-row" style="margin-bottom: 4px; background: transparent;">
+                <label style="color:#aaa; font-size:12px;">${t('toggleFullscreen')}</label>
+                <button class="cr-btn-time cr-hk-btn cr-hk-single" data-action="toggleFullscreen" title="Modifier la touche">${formatKeyDisplay(hotkeysConfig.toggleFullscreen.key)}</button>
+            </div>
+            <div class="cr-hk-row" style="margin-bottom: 4px; background: transparent;">
+                <label style="color:#aaa; font-size:12px;">${t('reloadStream')}</label>
+                <button class="cr-btn-time cr-hk-btn cr-hk-single" data-action="reloadStream" title="Modifier la touche">${formatKeyDisplay(hotkeysConfig.reloadStream.key)}</button>
             </div>
             <div class="cr-hk-row" style="margin-bottom: 4px; background: transparent;">
                 <label style="color:#aaa; font-size:12px;">${t('openMenu')}</label>
