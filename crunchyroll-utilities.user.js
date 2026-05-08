@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      6.13
-// @description  Couteau suisse Crunchyroll : Types de segments multiples & Ajout Rapide Automatique + Raccourci Menu.
+// @version      6.14
+// @description  Couteau suisse Crunchyroll : Types multiples, Ajout Rapide & Raccourci Play/Pause global.
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=crunchyroll.com
@@ -52,6 +52,7 @@
             addIntro: "Ajout rapide Intro",
             addOutro: "Ajout rapide Outro",
             openMenu: "Ouvrir le menu",
+            togglePlay: "Lecture / Pause",
             pressKey: "Appuyez...",
             unassigned: "Non assigné"
         },
@@ -86,6 +87,7 @@
             addIntro: "Quick add Intro",
             addOutro: "Quick add Outro",
             openMenu: "Open menu",
+            togglePlay: "Play / Pause",
             pressKey: "Press...",
             unassigned: "Unassigned"
         }
@@ -112,7 +114,8 @@
 
     if (!hotkeysConfig.openIntro) hotkeysConfig.openIntro = { key: 'KeyI' };
     if (!hotkeysConfig.openOutro) hotkeysConfig.openOutro = { key: 'KeyO' };
-    if (!hotkeysConfig.openMenu) hotkeysConfig.openMenu = { key: 'KeyM' }; // NOUVEAU RACCOURCI
+    if (!hotkeysConfig.openMenu) hotkeysConfig.openMenu = { key: 'KeyM' }; 
+    if (!hotkeysConfig.togglePlay) hotkeysConfig.togglePlay = { key: 'Space' }; // NOUVEAU RACCOURCI PLAY/PAUSE
     
     let isSkipping = false;
     let hasAutoFilled = false;
@@ -290,7 +293,6 @@
         }
     }
 
-    // NOUVEAU : Fonction universelle pour ouvrir/fermer le menu
     function toggleMainMenu() {
         const menu = document.getElementById('cr-skip-menu');
         const configMenu = document.getElementById('cr-config-menu');
@@ -356,6 +358,18 @@
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
         if (!videoElement) return;
 
+        // Force Play/Pause (empêche le scroll si touche Espace)
+        if (e.code === hotkeysConfig.togglePlay.key) {
+            e.preventDefault(); 
+            e.stopPropagation();
+            if (videoElement.paused) {
+                videoElement.play();
+            } else {
+                videoElement.pause();
+            }
+            return;
+        }
+
         if (e.code === hotkeysConfig.openIntro.key) {
             e.preventDefault(); e.stopPropagation();
             openQuickMenu('intro');
@@ -368,7 +382,6 @@
             return;
         }
 
-        // Raccourci pour ouvrir/fermer le menu principal
         if (e.code === hotkeysConfig.openMenu.key) {
             e.preventDefault(); e.stopPropagation();
             toggleMainMenu();
@@ -440,6 +453,10 @@
 
         html += `
         <div style="margin-bottom: 15px; border-left: 2px solid #444; padding-left: 8px;">
+            <div class="cr-hk-row" style="margin-bottom: 4px; background: transparent;">
+                <label style="color:#aaa; font-size:12px;">${t('togglePlay')}</label>
+                <button class="cr-btn-time cr-hk-btn cr-hk-single" data-action="togglePlay" title="Modifier la touche">${formatKeyDisplay(hotkeysConfig.togglePlay.key)}</button>
+            </div>
             <div class="cr-hk-row" style="margin-bottom: 4px; background: transparent;">
                 <label style="color:#aaa; font-size:12px;">${t('openMenu')}</label>
                 <button class="cr-btn-time cr-hk-btn cr-hk-single" data-action="openMenu" title="Modifier la touche">${formatKeyDisplay(hotkeysConfig.openMenu.key)}</button>
