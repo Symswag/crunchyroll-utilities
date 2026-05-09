@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      6.15
-// @description  Couteau suisse Crunchyroll : Ajout des raccourcis Plein Écran forcé et Rechargement du flux.
+// @version      6.16
+// @description  Couteau suisse Crunchyroll : Ajout du raccourci intelligent (Intro ou Outro selon le temps).
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=crunchyroll.com
@@ -51,6 +51,7 @@
             backward: "Reculer",
             addIntro: "Ajout rapide Intro",
             addOutro: "Ajout rapide Outro",
+            addAuto: "Ajout intelligent (Intro/Outro)",
             openMenu: "Ouvrir le menu",
             togglePlay: "Lecture / Pause",
             toggleFullscreen: "Plein écran",
@@ -88,6 +89,7 @@
             backward: "Backward",
             addIntro: "Quick add Intro",
             addOutro: "Quick add Outro",
+            addAuto: "Smart add (Intro/Outro)",
             openMenu: "Open menu",
             togglePlay: "Play / Pause",
             toggleFullscreen: "Toggle Fullscreen",
@@ -118,10 +120,11 @@
 
     if (!hotkeysConfig.openIntro) hotkeysConfig.openIntro = { key: 'KeyI' };
     if (!hotkeysConfig.openOutro) hotkeysConfig.openOutro = { key: 'KeyO' };
+    if (!hotkeysConfig.addAuto) hotkeysConfig.addAuto = { key: 'KeyU' }; // NOUVEAU RACCOURCI INTELLIGENT
     if (!hotkeysConfig.openMenu) hotkeysConfig.openMenu = { key: 'KeyM' }; 
     if (!hotkeysConfig.togglePlay) hotkeysConfig.togglePlay = { key: 'Space' }; 
-    if (!hotkeysConfig.toggleFullscreen) hotkeysConfig.toggleFullscreen = { key: 'KeyF' }; // NOUVEAU
-    if (!hotkeysConfig.reloadStream) hotkeysConfig.reloadStream = { key: 'KeyR' }; // NOUVEAU
+    if (!hotkeysConfig.toggleFullscreen) hotkeysConfig.toggleFullscreen = { key: 'KeyF' };
+    if (!hotkeysConfig.reloadStream) hotkeysConfig.reloadStream = { key: 'KeyR' };
     
     let isSkipping = false;
     let hasAutoFilled = false;
@@ -388,8 +391,17 @@
         // Recharger le flux
         if (e.code === hotkeysConfig.reloadStream.key) {
             e.preventDefault(); e.stopPropagation();
-            // Fait un micro-saut pour forcer le lecteur à rafraichir son buffer
             forceJumpToTime(videoElement.currentTime + 0.001);
+            return;
+        }
+
+        // Ajout Rapide Intelligent (Intro/Outro)
+        if (e.code === hotkeysConfig.addAuto.key) {
+            e.preventDefault(); e.stopPropagation();
+            if (videoElement.duration) {
+                const type = (videoElement.currentTime < videoElement.duration / 2) ? 'intro' : 'outro';
+                openQuickMenu(type);
+            }
             return;
         }
 
@@ -491,6 +503,10 @@
             <div class="cr-hk-row" style="margin-bottom: 4px; background: transparent;">
                 <label style="color:#aaa; font-size:12px;">${t('openMenu')}</label>
                 <button class="cr-btn-time cr-hk-btn cr-hk-single" data-action="openMenu" title="Modifier la touche">${formatKeyDisplay(hotkeysConfig.openMenu.key)}</button>
+            </div>
+            <div class="cr-hk-row" style="margin-bottom: 4px; background: transparent;">
+                <label style="color:#aaa; font-size:12px; color:#f47521;"><b>${t('addAuto')}</b></label>
+                <button class="cr-btn-time cr-hk-btn cr-hk-single" data-action="addAuto" title="Modifier la touche">${formatKeyDisplay(hotkeysConfig.addAuto.key)}</button>
             </div>
             <div class="cr-hk-row" style="margin-bottom: 4px; background: transparent;">
                 <label style="color:#aaa; font-size:12px;">${t('addIntro')}</label>
