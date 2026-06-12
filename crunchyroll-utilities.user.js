@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      6.17
+// @version      6.17.1
 // @description  Couteau suisse Crunchyroll : Ajout du raccourci intelligent (Intro ou Outro selon le temps).
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
@@ -399,7 +399,8 @@
         if (e.code === hotkeysConfig.addAuto.key) {
             e.preventDefault(); e.stopPropagation();
             if (videoElement.duration) {
-                if (document.getElementById('cr-type-sel').value == 'outro') {
+                const ratio = videoElement.currentTime / videoElement.duration;
+                if (ratio > 0.95) {
                     openQuickMenu('preview')
                 } else {    
                     const type = (videoElement.currentTime < videoElement.duration / 2) ? 'intro' : 'outro';

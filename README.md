@@ -1,6 +1,6 @@
 # ⚙️ Crunchyroll Utilities
 
-![Version](https://img.shields.io/badge/version-6.17.0-orange.svg)
+![Version](https://img.shields.io/badge/version-6.17.1-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-Tampermonkey-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
