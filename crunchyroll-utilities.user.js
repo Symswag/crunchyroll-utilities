@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      6.17.4
+// @version      6.17.5
 // @description  Couteau suisse Crunchyroll : Ajout du raccourci intelligent (Intro ou Outro selon le temps).
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
@@ -284,8 +284,6 @@
         }
         setTimeout(() => { 
             isSkipping = false; 
-        
-            handleTimeUpdate();
         }, 200);
     }
 
@@ -296,13 +294,44 @@
         const currentTime = videoElement.currentTime;
         const duration = videoElement.duration; 
 
+        // 1. Filtrer et récupérer uniquement les segments activés
+        const activeSegments = [];
         for (const [type, segment] of Object.entries(data)) {
-            if (!skipTypesEnabled[type]) continue; 
-            if (currentTime >= segment.start && currentTime < segment.end - 0.5) {
-                let targetTime = segment.end;
-                if (!isNaN(duration) && targetTime > duration - 2) targetTime = duration - 2;
-                if (currentTime < targetTime && currentTime < duration - 3) forceJumpToTime(targetTime);
-                break;
+            if (skipTypesEnabled[type]) {
+                activeSegments.push({ start: segment.start, end: segment.end });
+            }
+        }
+
+        // 2. Vérifier si le temps actuel se trouve dans l'un de ces segments
+        // On garde la tolérance de "segment.end - 0.5" pour éviter les boucles infinies en fin de segment
+        const currentSegment = activeSegments.find(seg => currentTime >= seg.start && currentTime < seg.end - 0.5);
+
+        if (currentSegment) {
+            let targetTime = currentSegment.end;
+            let extended = true;
+
+            // 3. Fusionner dynamiquement les segments consécutifs ou qui chevauchent
+            // On boucle tant qu'on trouve un segment qui commence avant ou pile à la fin de notre targetTime actuel
+            while (extended) {
+                extended = false;
+                for (const seg of activeSegments) {
+                    // Si un segment commence avant (ou pile à) notre targetTime actuel,
+                    // ET qu'il se termine plus loin que notre targetTime actuel, on repousse la fin.
+                    if (seg.start <= targetTime && seg.end > targetTime) {
+                        targetTime = seg.end;
+                        extended = true; // On a agrandi le saut, on refait un tour pour voir s'il y en a un autre après
+                    }
+                }
+            }
+
+            // 4. Appliquer les limites de sécurité de fin de vidéo
+            if (!isNaN(duration) && targetTime > duration - 2) {
+                targetTime = duration - 2;
+            }
+
+            // 5. Lancer le saut unique
+            if (currentTime < targetTime && currentTime < duration - 3) {
+                forceJumpToTime(targetTime);
             }
         }
     }
