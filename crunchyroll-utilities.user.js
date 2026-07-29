@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities (Supabase SQL Edition)
 // @namespace    http://tampermonkey.net/
-// @version      8.0.0
-// @description  Couteau suisse Crunchyroll : Synchro SQL par épisode (Intro/Outro)
+// @version      8.0.1
+// @description  Couteau suisse Crunchyroll
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=crunchyroll.com

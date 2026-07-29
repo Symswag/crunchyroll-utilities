@@ -1,23 +1,24 @@
-# ⚙️ Crunchyroll Utilities
+# ⚙️ Crunchyroll Utilities (Supabase SQL Edition)
 
-![Version](https://img.shields.io/badge/version-8.0.0-orange.svg)
+![Version](https://img.shields.io/badge/version-8.0.1-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-Tampermonkey-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 A lightweight, powerful, and secure "Swiss Army knife" userscript for Crunchyroll. 
-Currently featuring a **Local-First Cloud-Synced Auto-Skip** system, allowing you to seamlessly share your custom intro/outro skip times across all your devices (PC, tablet, smartphone).
+Now featuring a **Cloud-Synced Auto-Skip system via Supabase SQL**, allowing you to seamlessly share your custom timecodes (intro, outro, recap, preview) across all your devices (PC, tablet, smartphone).
 
 ---
 
 ## ✨ Features
 
-* ⏭️ **Smart Auto-Skip:** Automatically skips intros and outros based on your saved timecodes. Stops exactly 2 seconds before the end of the video to perfectly trigger Crunchyroll's native "Next Episode" countdown.
-* ☁️ **Local-First Cloud Sync:** Edits apply instantly using local storage, while syncing to the cloud (via JSONBin.io) in the background. Never lose your skips when switching from your PC to your tablet!
+* ⏭️ **Smart Auto-Skip:** Automatically skips intros, outros, recaps, and previews based on your saved timecodes. Stops exactly 2 seconds before the end of the video to perfectly trigger Crunchyroll's native "Next Episode" countdown.
+* ☁️ **Local-First Cloud Sync:** Edits apply instantly using local storage, while syncing to your Supabase SQL database in the background.
+* ⌨️ **Customizable Hotkeys:** Control everything from the keyboard (Forward, Backward, Quick Add Intro/Outro, Play/Pause, Fullscreen, Reload, Open Menu).
 * 🔒 **Secure Configuration:** API keys are never hardcoded in the script. They are entered via a dedicated UI menu and securely stored in your browser's local storage.
-* 🌍 **Bilingual Support (i18n):** The interface automatically detects your browser's language and adapts seamlessly (Currently supports **English** and **French**).
-* 🎨 **Visual Highlights:** Displays colored markers directly on the Crunchyroll video progress bar (Green for Intros, Red for Outros).
-* ⏱️ **Smart Auto-Fill:** Opening the menu automatically detects whether you are in the first or second half of the episode and pre-fills the start/end timecodes based on your current position.
-* 🚀 **SPA Ready & Robust UI:** Fully compatible with Crunchyroll's Single Page Application navigation (no need to refresh the page between episodes). The menu button is injected cleanly as the very first icon in the player controls.
+* 🌍 **Bilingual Support (i18n):** The interface automatically detects your browser's language (Currently supports **English** and **French**).
+* 🎨 **Visual Highlights:** Displays colored markers directly on the video progress bar (Green = Intro, Red = Outro, Yellow = Recap, Blue = Preview).
+* ⏱️ **Smart Auto-Fill:** Opening the menu automatically detects your position in the video and pre-fills the start/end timecodes by guessing the segment type.
+* 🚀 **SPA Ready & Robust UI:** Fully compatible with Crunchyroll's Single Page Application navigation (no need to refresh the page between episodes). The menu icon injects cleanly into the player.
 
 ---
 
@@ -33,30 +34,42 @@ You need a userscript manager installed in your browser. We recommend **[Tamperm
 
 ---
 
-## ☁️ Cloud Sync Setup (JSONBin.io)
+## ☁️ Cloud Sync Setup (Supabase SQL)
 
-To share your saved skips across multiple devices, you need to set up a free JSON database.
+To share your saved skips across multiple devices, you need to set up a Supabase database (replaces the old JSONBin system).
 
-1. Go to **[JSONBin.io](https://jsonbin.io/)** and create a free account.
-2. Go to your Dashboard and create a **New Bin**.
-3. Inside the bin, paste the following dummy data (this is required to initialize it):
-   ```json
-   {
-     "init": "ok"
-   }
-4. Click Create and copy your Bin ID (found in the URL or the Bin settings).
-5. Go to the API Keys section in your JSONBin settings and copy your Master Key (it should start with $2a$10$...).
-6. Open any video on Crunchyroll, click the Gear Icon (⚙️) to open the CR Utilities menu, then click the Mini Gear Icon in the header to open the Cloud Config Menu.
-7. Paste your Bin ID and Master Key into the respective fields and click Save.
-8. Repeat the installation and configuration on your other devices. You're now fully synced!
+### Step 1: Create the Supabase Project and Table
+1. Go to **[Supabase](https://supabase.com/)** and create a free account.
+2. Create a **New Project**.
+3. In the SQL Editor of your project, run the following query to create the necessary table for synchronization:
+   ```sql
+   create table episode_skips (
+     episode_id text not null,
+     skip_type text not null check (skip_type in ('intro', 'outro', 'recap', 'preview')),
+     start_time real not null,
+     end_time real not null,
+     updated_at timestamptz default now(),
+     primary key (episode_id, skip_type)
+   );
+   ```
+4. *Security note:* Remember to disable RLS (Row Level Security) on this table if you use it strictly for a personal project, or configure appropriate insert/select policies.
+
+### Step 2: Link the script to Supabase
+1. Go to your Supabase **Project Overview** (located just under your project name).
+2. Copy the **Project URL** and the **API Key (anon / public)**.
+3. Play any video on Crunchyroll. Click the Gear Icon (⚙️) in the bottom right to open the CR Utilities menu.
+4. Click the small gear (⚙️ Advanced Settings) at the top of the menu to open the Cloud Configuration.
+5. Paste your **Supabase URL** and **API Key** into the respective fields and click **Save & Return**.
+6. Repeat the operation on your other devices. Your data is now synced in real time!
 
 ---
 
 ## 🎮 How to Use
 
 1. Start watching any episode on Crunchyroll.
-2. Look for the new Gear Icon (⚙️) in the bottom right corner of the video player controls (it should be the first button on the left of the control group).
-3. Click it to open the CR Utilities Menu.
-4. Navigate to the start of an Intro or Outro. The menu will automatically grab your current timecode and guess the segment type.
-5. Click Save Segment. The script will highlight the segment on the progress bar and silently back it up to your cloud.
-6. Use the ✖ button next to any saved segment in the list to delete it globally.
+2. Look for the new Gear Icon (⚙️) in the bottom right corner of the video player controls.
+3. Click it (or use the default `M` hotkey) to open the CR Utilities Menu.
+4. Navigate to the start of an Intro, Outro, recap, or preview. The menu will automatically capture your timecode and try to guess the segment type.
+5. Click **Save Segment**. The script will highlight the segment on the progress bar and silently save it to your cloud.
+6. Use the cross (✖) next to any saved segment in the list to delete it globally.
+7. Modify your keyboard shortcuts in the advanced settings to add timecodes on the fly without even opening the menu!
