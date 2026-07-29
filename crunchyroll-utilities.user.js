@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Crunchyroll Utilities
+// @name         Crunchyroll Utilities (Supabase SQL Edition)
 // @namespace    http://tampermonkey.net/
-// @version      6.17.5
-// @description  Couteau suisse Crunchyroll : Ajout du raccourci intelligent (Intro ou Outro selon le temps).
+// @version      8.0.0
+// @description  Couteau suisse Crunchyroll : Synchro SQL par épisode (Intro/Outro)
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=crunchyroll.com
@@ -11,7 +11,7 @@
 // @grant        GM_listValues
 // @grant        GM_addStyle
 // @grant        GM_xmlhttpRequest
-// @connect      api.jsonbin.io
+// @connect      supabase.co
 // ==/UserScript==
 
 (function() {
@@ -23,7 +23,7 @@
     const i18n = {
         fr: {
             configTitle: "⚙️ Paramètres Avancés",
-            configDesc: "Entrez vos identifiants JSONBin.io pour synchroniser vos skips entre vos appareils.",
+            configDesc: "Entrez vos identifiants Supabase pour synchroniser vos skips entre vos appareils.",
             saveKeys: "Sauvegarder & Retour",
             autoSkip: "Skips automatiques :",
             type: "Type :",
@@ -38,10 +38,8 @@
             zeroTime: "Début de l'épisode",
             maxTime: "Fin de l'épisode",
             errMissing: "⚠️ Clés Cloud manquantes (⚙️)",
-            errConn: "❌ Erreur de connexion Cloud",
+            errConn: "❌ Erreur Cloud",
             cloudCheck: "⬇️ Vérification Cloud...",
-            cloudEmpty: "✅ Cloud vierge (Prêt pour la 1ère sauvegarde)",
-            cloudPushOld: "⏳ Envoi des anciens épisodes...",
             cloudOk: "✅ À jour avec le Cloud",
             cloudSend: "⏳ Envoi vers le Cloud...",
             cloudSyncOk: "✅ Synchro Cloud OK",
@@ -61,7 +59,7 @@
         },
         en: {
             configTitle: "⚙️ Advanced Settings",
-            configDesc: "Enter your JSONBin.io credentials to sync your skips across devices.",
+            configDesc: "Enter your Supabase credentials to sync your skips across devices.",
             saveKeys: "Save & Return",
             autoSkip: "Auto-Skips:",
             type: "Type:",
@@ -76,10 +74,8 @@
             zeroTime: "Start of episode",
             maxTime: "End of episode",
             errMissing: "⚠️ Missing Cloud Keys (⚙️)",
-            errConn: "❌ Cloud Connection Error",
+            errConn: "❌ Cloud Error",
             cloudCheck: "⬇️ Checking Cloud...",
-            cloudEmpty: "✅ Empty Cloud (Ready for 1st save)",
-            cloudPushOld: "⏳ Uploading old episodes...",
             cloudOk: "✅ Up to date with Cloud",
             cloudSend: "⏳ Sending to Cloud...",
             cloudSyncOk: "✅ Cloud Sync OK",
@@ -120,7 +116,7 @@
 
     if (!hotkeysConfig.openIntro) hotkeysConfig.openIntro = { key: 'KeyI' };
     if (!hotkeysConfig.openOutro) hotkeysConfig.openOutro = { key: 'KeyO' };
-    if (!hotkeysConfig.addAuto) hotkeysConfig.addAuto = { key: 'KeyU' }; // NOUVEAU RACCOURCI INTELLIGENT
+    if (!hotkeysConfig.addAuto) hotkeysConfig.addAuto = { key: 'KeyU' }; 
     if (!hotkeysConfig.openMenu) hotkeysConfig.openMenu = { key: 'KeyM' }; 
     if (!hotkeysConfig.togglePlay) hotkeysConfig.togglePlay = { key: 'Space' }; 
     if (!hotkeysConfig.toggleFullscreen) hotkeysConfig.toggleFullscreen = { key: 'KeyF' };
@@ -191,56 +187,83 @@
     `);
 
     // =====================================================================
-    // 🌐 CLOUD & UTILITAIRES DE TEMPS
+    // 🌐 CLOUD & UTILITAIRES DE TEMPS (SUPABASE SQL)
     // =====================================================================
-    function syncCloud(method, data = null) {
-        const binId = GM_getValue('cr_bin_id', '');
-        const apiKey = GM_getValue('cr_api_key', '');
-        if (!binId || !apiKey) return Promise.resolve(null);
-        return new Promise((resolve) => {
-            GM_xmlhttpRequest({
-                method: method,
-                url: `https://api.jsonbin.io/v3/b/${binId}`,
-                headers: { "Content-Type": "application/json", "X-Master-Key": apiKey },
-                data: data ? JSON.stringify(data) : null,
-                onload: (res) => {
-                    try { resolve(JSON.parse(res.responseText).record || null); } catch (e) { resolve(null); }
-                },
-                onerror: () => resolve(null)
-            });
+    
+    function getSupaUrl() {
+        return GM_getValue('cr_supa_url', '').replace(/\/$/, '');
+    }
+
+    function getSupaHeaders(isUpsert = false) {
+        const apiKey = GM_getValue('cr_supa_key', '');
+        const headers = { 
+            "apikey": apiKey,
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json"
+        };
+        if (isUpsert) {
+            headers["Prefer"] = "resolution=merge-duplicates";
+        }
+        return headers;
+    }
+
+    function checkSupaConnection() {
+        const statusEl = document.getElementById('cr-sync-text');
+        if (!getSupaUrl() || !GM_getValue('cr_supa_key', '')) {
+            if (statusEl) statusEl.innerText = t('errMissing'); 
+            return;
+        }
+        if (statusEl) statusEl.innerText = t('cloudCheck');
+        
+        GM_xmlhttpRequest({
+            method: "GET",
+            url: `${getSupaUrl()}/rest/v1/episode_skips?limit=1`,
+            headers: getSupaHeaders(),
+            onload: (res) => {
+                if (res.status === 200) {
+                    if (statusEl) statusEl.innerText = t('cloudOk');
+                    fetchCurrentEpisodeFromCloud(currentEpisodeId);
+                } else {
+                    if (statusEl) statusEl.innerText = t('errConn');
+                }
+            },
+            onerror: () => {
+                if (statusEl) statusEl.innerText = t('errConn');
+            }
         });
     }
 
-    async function pullFromCloudBackground() {
+    function fetchCurrentEpisodeFromCloud(episodeId) {
+        if (!episodeId || !getSupaUrl() || !GM_getValue('cr_supa_key', '')) return;
+        
         const statusEl = document.getElementById('cr-sync-text');
-        if (!GM_getValue('cr_bin_id', '') || !GM_getValue('cr_api_key', '')) {
-            if (statusEl) statusEl.innerText = t('errMissing'); return;
-        }
         if (statusEl) statusEl.innerText = t('cloudCheck');
-        const cloud = await syncCloud("GET");
-        if (!cloud) {
-            if (statusEl) statusEl.innerText = t('errConn'); return;
-        }
-        if (cloud.init === "ok" && Object.keys(cloud).length === 1) {
-            if (statusEl) statusEl.innerText = t('cloudEmpty'); return;
-        }
-        if (JSON.stringify(cloud) !== JSON.stringify(localData)) {
-            let needPush = false;
-            GM_listValues().forEach(key => {
-                if (key.startsWith("cr_ep_")) {
-                    const epId = key.replace("cr_ep_", "");
-                    if (!cloud[epId]) { cloud[epId] = GM_getValue(key); needPush = true; }
+
+        GM_xmlhttpRequest({
+            method: "GET",
+            url: `${getSupaUrl()}/rest/v1/episode_skips?episode_id=eq.${episodeId}`,
+            headers: getSupaHeaders(),
+            onload: (res) => {
+                if (res.status === 200) {
+                    try {
+                        const records = JSON.parse(res.responseText);
+                        localData[episodeId] = {};
+                        records.forEach(row => {
+                            localData[episodeId][row.skip_type] = { start: row.start_time, end: row.end_time };
+                        });
+                        GM_setValue('cr_sync_data', localData); // Met à jour le cache local
+                        updateMenuList(); 
+                        drawHighlights();
+                        if (statusEl) {
+                            statusEl.innerText = t('cloudOk');
+                            setTimeout(() => { if (statusEl.innerText === t('cloudOk')) statusEl.innerText = ""; }, 3000);
+                        }
+                    } catch (e) {
+                        console.error("Erreur parsing Supabase", e);
+                    }
                 }
-            });
-            localData = cloud;
-            GM_setValue('cr_sync_data', localData);
-            if (needPush) {
-                if (statusEl) statusEl.innerText = t('cloudPushOld');
-                await syncCloud("PUT", localData);
             }
-            updateMenuList(); drawHighlights();
-        }
-        if (statusEl) statusEl.innerText = t('cloudOk');
+        });
     }
 
     function timeToSeconds(timeStr) {
@@ -294,7 +317,6 @@
         const currentTime = videoElement.currentTime;
         const duration = videoElement.duration; 
 
-        // 1. Filtrer et récupérer uniquement les segments activés
         const activeSegments = [];
         for (const [type, segment] of Object.entries(data)) {
             if (skipTypesEnabled[type]) {
@@ -302,34 +324,26 @@
             }
         }
 
-        // 2. Vérifier si le temps actuel se trouve dans l'un de ces segments
-        // On garde la tolérance de "segment.end - 0.5" pour éviter les boucles infinies en fin de segment
         const currentSegment = activeSegments.find(seg => currentTime >= seg.start && currentTime < seg.end - 0.5);
 
         if (currentSegment) {
             let targetTime = currentSegment.end;
             let extended = true;
 
-            // 3. Fusionner dynamiquement les segments consécutifs ou qui chevauchent
-            // On boucle tant qu'on trouve un segment qui commence avant ou pile à la fin de notre targetTime actuel
             while (extended) {
                 extended = false;
                 for (const seg of activeSegments) {
-                    // Si un segment commence avant (ou pile à) notre targetTime actuel,
-                    // ET qu'il se termine plus loin que notre targetTime actuel, on repousse la fin.
                     if (seg.start <= targetTime && seg.end > targetTime) {
                         targetTime = seg.end;
-                        extended = true; // On a agrandi le saut, on refait un tour pour voir s'il y en a un autre après
+                        extended = true;
                     }
                 }
             }
 
-            // 4. Appliquer les limites de sécurité de fin de vidéo
             if (!isNaN(duration) && targetTime > duration - 2) {
                 targetTime = duration - 2;
             }
 
-            // 5. Lancer le saut unique
             if (currentTime < targetTime && currentTime < duration - 3) {
                 forceJumpToTime(targetTime);
             }
@@ -401,7 +415,6 @@
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
         if (!videoElement) return;
 
-        // Lecture / Pause
         if (e.code === hotkeysConfig.togglePlay.key) {
             e.preventDefault(); 
             e.stopPropagation();
@@ -410,7 +423,6 @@
             return;
         }
 
-        // Plein écran
         if (e.code === hotkeysConfig.toggleFullscreen.key) {
             e.preventDefault(); e.stopPropagation();
             if (!document.fullscreenElement) {
@@ -422,14 +434,12 @@
             return;
         }
 
-        // Recharger le flux
         if (e.code === hotkeysConfig.reloadStream.key) {
             e.preventDefault(); e.stopPropagation();
             forceJumpToTime(videoElement.currentTime + 0.001);
             return;
         }
 
-        // Ajout Rapide Intelligent (Intro/Outro)
         if (e.code === hotkeysConfig.addAuto.key) {
             e.preventDefault(); e.stopPropagation();
             if (videoElement.duration) {
@@ -749,11 +759,11 @@
                     </div>
                 </div>
                 
-                <div style="font-size: 13px; color: #ddd; margin-bottom: 8px;"><b>☁️ Cloud Sync</b></div>
-                <label style="font-size: 11px; color:#aaa; margin-bottom: 4px; display: block;">Bin ID</label>
-                <input type="text" class="cr-input-full" id="cr-bin-id" placeholder="Bin ID" value="${GM_getValue('cr_bin_id', '')}">
-                <label style="font-size: 11px; color:#aaa; margin-bottom: 4px; display: block;">API Master Key</label>
-                <input type="password" class="cr-input-full" id="cr-api-key" placeholder="API Key" value="${GM_getValue('cr_api_key', '')}">
+                <div style="font-size: 13px; color: #ddd; margin-bottom: 8px;"><b>☁️ Cloud Sync (SQL Supabase)</b></div>
+                <label style="font-size: 11px; color:#aaa; margin-bottom: 4px; display: block;">URL Supabase</label>
+                <input type="text" class="cr-input-full" id="cr-supa-url" placeholder="https://xxx.supabase.co" value="${GM_getValue('cr_supa_url', '')}">
+                <label style="font-size: 11px; color:#aaa; margin-bottom: 4px; display: block;">Clé API (anon/public)</label>
+                <input type="password" class="cr-input-full" id="cr-supa-key" placeholder="eyJhbGciOiJIUzI1Ni..." value="${GM_getValue('cr_supa_key', '')}">
                 
                 <hr style="border-color: rgba(255,255,255,0.05); margin: 15px 0;">
                 
@@ -785,10 +795,10 @@
             };
             
             document.getElementById('cr-save-keys').onclick = () => {
-                GM_setValue('cr_bin_id', document.getElementById('cr-bin-id').value.trim());
-                GM_setValue('cr_api_key', document.getElementById('cr-api-key').value.trim());
+                GM_setValue('cr_supa_url', document.getElementById('cr-supa-url').value.trim());
+                GM_setValue('cr_supa_key', document.getElementById('cr-supa-key').value.trim());
                 document.getElementById('cr-close-config').click();
-                pullFromCloudBackground();
+                checkSupaConnection(); 
             };
             
             document.getElementById('cr-get-start').onclick = () => { 
@@ -831,19 +841,38 @@
                 hasAutoFilled = false;
                 if (autoFillTimer) { clearTimeout(autoFillTimer); autoFillTimer = null; }
 
-                updateMenuList(); drawHighlights();
+                updateMenuList(); 
+                drawHighlights();
 
-                if (GM_getValue('cr_bin_id', '') && GM_getValue('cr_api_key', '')) {
+                if (getSupaUrl() && GM_getValue('cr_supa_key', '')) {
                     status.innerText = t('cloudSend');
-                    syncCloud("PUT", localData).then(() => {
-                        status.innerText = t('cloudSyncOk');
-                        setTimeout(() => { if(status && status.innerText === t('cloudSyncOk')) status.innerText = ""; }, 3000);
+                    
+                    const payload = {
+                        episode_id: currentEpisodeId,
+                        skip_type: type,
+                        start_time: start,
+                        end_time: end
+                    };
+
+                    GM_xmlhttpRequest({
+                        method: "POST",
+                        url: `${getSupaUrl()}/rest/v1/episode_skips`,
+                        headers: getSupaHeaders(true),
+                        data: JSON.stringify(payload),
+                        onload: (res) => {
+                            if (res.status === 201 || res.status === 200 || res.status === 204) {
+                                status.innerText = t('cloudSyncOk');
+                            } else {
+                                status.innerText = t('errConn');
+                            }
+                            setTimeout(() => { if (status && status.innerText === t('cloudSyncOk')) status.innerText = ""; }, 3000);
+                        }
                     });
                 }
             };
             
             updateMenuList();
-            pullFromCloudBackground();
+            checkSupaConnection();
         }
 
         if (!document.getElementById('cr-skip-btn')) {
@@ -906,14 +935,25 @@
             item.querySelector('button').onclick = () => {
                 delete localData[currentEpisodeId][type];
                 GM_setValue('cr_sync_data', localData);
-                updateMenuList(); drawHighlights();
+                updateMenuList(); 
+                drawHighlights();
                 
-                if (GM_getValue('cr_bin_id', '') && GM_getValue('cr_api_key', '')) {
+                if (getSupaUrl() && GM_getValue('cr_supa_key', '')) {
                     const status = document.getElementById('cr-sync-text');
                     if (status) status.innerText = t('cloudDel');
-                    syncCloud("PUT", localData).then(() => {
-                        if (status) status.innerText = t('cloudSyncOk');
-                        setTimeout(() => { if(status && status.innerText === t('cloudSyncOk')) status.innerText = ""; }, 3000);
+                    
+                    GM_xmlhttpRequest({
+                        method: "DELETE",
+                        url: `${getSupaUrl()}/rest/v1/episode_skips?episode_id=eq.${currentEpisodeId}&skip_type=eq.${type}`,
+                        headers: getSupaHeaders(),
+                        onload: (res) => {
+                            if (res.status === 200 || res.status === 204) {
+                                if (status) status.innerText = t('cloudSyncOk');
+                            } else {
+                                if (status) status.innerText = t('errConn');
+                            }
+                            setTimeout(() => { if (status && status.innerText === t('cloudSyncOk')) status.innerText = ""; }, 3000);
+                        }
                     });
                 }
             };
@@ -941,9 +981,12 @@
             currentEpisodeId = null; videoElement = null; playerContainer = null; return;
         }
         if (id !== currentEpisodeId) {
-            currentEpisodeId = id; hasAutoFilled = false;
+            currentEpisodeId = id; 
+            hasAutoFilled = false;
             if (autoFillTimer) { clearTimeout(autoFillTimer); autoFillTimer = null; }
-            updateMenuList(); drawHighlights();
+            
+            // Va chercher les données du nouvel épisode sur Supabase
+            fetchCurrentEpisodeFromCloud(id);
         }
         initMenuAndButton();
         if (videoElement) drawHighlights();
