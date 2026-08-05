@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      8.3.0
-// @description  Couteau suisse Crunchyroll
+// @version      8.3.1
+// @description  Couteau suisse Crunchyroll : Fix RTX VSR (visibility mask)
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=crunchyroll.com
@@ -202,7 +202,7 @@
         .cr-hk-time-input::-webkit-outer-spin-button, .cr-hk-time-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .cr-hk-time-label { color: #666; font-size: 11px; padding: 0 6px 0 2px; font-weight: bold; user-select: none; }
 
-        /* COMPTE À REBOURS ANIMÉ */
+        /* COMPTE À REBOURS ANIMÉ - CORRIGÉ POUR RTX VSR */
         #cr-countdown-overlay {
             position: absolute;
             bottom: 110px;
@@ -217,13 +217,15 @@
             z-index: 2147483647;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.6);
             opacity: 0;
-            transition: opacity 0.2s ease, transform 0.2s ease;
+            visibility: hidden; /* C'est cette ligne qui sauve le VSR en détruisant la couche graphique */
+            transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
             transform: scale(0.8);
             pointer-events: none;
             backdrop-filter: blur(5px);
         }
         #cr-countdown-overlay.cr-show {
             opacity: 1;
+            visibility: visible; /* Et celle-ci qui la recrée */
             transform: scale(1);
         }
         .cr-spinner {
