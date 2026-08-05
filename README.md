@@ -1,6 +1,6 @@
 # ⚙️ Crunchyroll Utilities (Supabase SQL Edition)
 
-![Version](https://img.shields.io/badge/version-8.0.1-orange.svg)
+![Version](https://img.shields.io/badge/version-8.3.0-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-Tampermonkey-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 

@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Crunchyroll Utilities (Supabase SQL Edition)
+// @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      8.0.1
+// @version      8.3.0
 // @description  Couteau suisse Crunchyroll
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
@@ -133,7 +133,24 @@
     };
 
     GM_addStyle(`
-        #cr-skip-menu, #cr-config-menu { position: absolute; bottom: 85px; right: 15px; z-index: 2147483647; background: rgba(14, 15, 18, 0.95); color: #fff; padding: 18px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); width: 300px; font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; box-shadow: 0 10px 30px rgba(0,0,0,0.7); display: none; backdrop-filter: blur(5px); }
+        #cr-skip-menu, #cr-config-menu { 
+            position: absolute; bottom: 85px; right: 15px; z-index: 2147483647; 
+            background: rgba(14, 15, 18, 0.95); color: #fff; padding: 18px; 
+            border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); 
+            width: 300px; font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7); display: none; backdrop-filter: blur(5px);
+            max-height: 60vh; /* LIMITE LA HAUTEUR DU MENU (60% de l'écran) */
+            overflow-y: auto; /* ACTIVE LE SCROLL SI BESOIN */
+            overflow-x: hidden;
+            overscroll-behavior: contain; /* ÉVITE DE SCROLLER LA PAGE EN ARRIÈRE-PLAN */
+        }
+
+        /* CUSTOM SCROLLBAR POUR UN LOOK PREMIUM */
+        #cr-skip-menu::-webkit-scrollbar, #cr-config-menu::-webkit-scrollbar { width: 6px; }
+        #cr-skip-menu::-webkit-scrollbar-track, #cr-config-menu::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 4px; }
+        #cr-skip-menu::-webkit-scrollbar-thumb, #cr-config-menu::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+        #cr-skip-menu::-webkit-scrollbar-thumb:hover, #cr-config-menu::-webkit-scrollbar-thumb:hover { background: rgba(244,117,33,0.6); }
+
         .cr-menu-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); }
         .cr-menu-header h3 { margin: 0; color: #f47521; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
         .cr-header-actions { display: flex; gap: 12px; align-items: center; }
@@ -184,6 +201,58 @@
         .cr-hk-time-input { width: 35px !important; background: transparent !important; color: #f47521 !important; border: none !important; padding: 4px 0 4px 6px !important; text-align: right; font-weight: bold; font-family: "Segoe UI", sans-serif; font-size: 13px; -moz-appearance: textfield; outline: none; }
         .cr-hk-time-input::-webkit-outer-spin-button, .cr-hk-time-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .cr-hk-time-label { color: #666; font-size: 11px; padding: 0 6px 0 2px; font-weight: bold; user-select: none; }
+
+        /* COMPTE À REBOURS ANIMÉ */
+        #cr-countdown-overlay {
+            position: absolute;
+            bottom: 110px;
+            right: 35px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(14, 15, 18, 0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2147483647;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.6);
+            opacity: 0;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            transform: scale(0.8);
+            pointer-events: none;
+            backdrop-filter: blur(5px);
+        }
+        #cr-countdown-overlay.cr-show {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .cr-spinner {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+        .cr-spinner-bg {
+            fill: none;
+            stroke: rgba(255,255,255,0.1);
+            stroke-width: 4;
+        }
+        .cr-spinner-progress {
+            fill: none;
+            stroke: #f47521;
+            stroke-width: 4;
+            stroke-linecap: round;
+            stroke-dasharray: 126; 
+            stroke-dashoffset: 0;
+            transition: stroke-dashoffset 0.2s linear; 
+        }
+        #cr-countdown-number {
+            color: #f47521;
+            font-size: 22px;
+            font-weight: bold;
+            font-family: "Segoe UI", Roboto, sans-serif;
+            z-index: 2;
+        }
     `);
 
     // =====================================================================
@@ -251,7 +320,7 @@
                         records.forEach(row => {
                             localData[episodeId][row.skip_type] = { start: row.start_time, end: row.end_time };
                         });
-                        GM_setValue('cr_sync_data', localData); // Met à jour le cache local
+                        GM_setValue('cr_sync_data', localData); 
                         updateMenuList(); 
                         drawHighlights();
                         if (statusEl) {
@@ -324,6 +393,52 @@
             }
         }
 
+        // =====================================
+        // LOGIQUE DU COMPTE À REBOURS ANIMÉ
+        // =====================================
+        const COUNTDOWN_SEC = 3;
+        const countdownEl = document.getElementById('cr-countdown-overlay');
+        
+        const upcomingSegment = activeSegments.find(seg => currentTime >= seg.start - COUNTDOWN_SEC && currentTime < seg.start);
+
+        if (upcomingSegment && !videoElement.paused) {
+            const exactRemaining = upcomingSegment.start - currentTime;
+            const displayRemaining = Math.ceil(exactRemaining);
+            
+            if (exactRemaining > 0 && exactRemaining <= COUNTDOWN_SEC && countdownEl) {
+                
+                // On injecte le SVG s'il n'est pas déjà présent
+                if (!countdownEl.querySelector('.cr-spinner')) {
+                    countdownEl.innerHTML = `
+                        <svg class="cr-spinner" viewBox="0 0 50 50">
+                            <circle class="cr-spinner-bg" cx="25" cy="25" r="20"></circle>
+                            <circle class="cr-spinner-progress" cx="25" cy="25" r="20"></circle>
+                        </svg>
+                        <span id="cr-countdown-number"></span>
+                    `;
+                }
+
+                // Mise à jour du chiffre
+                const numEl = countdownEl.querySelector('#cr-countdown-number');
+                if (numEl) numEl.innerText = displayRemaining;
+
+                // Mise à jour de l'animation de l'anneau (circonférence ~126)
+                const progressEl = countdownEl.querySelector('.cr-spinner-progress');
+                if (progressEl) {
+                    const progressRatio = exactRemaining / COUNTDOWN_SEC; // De 1 à 0
+                    const dashoffset = 126 - (126 * progressRatio); // De 0 à 126
+                    progressEl.style.strokeDashoffset = dashoffset;
+                }
+
+                countdownEl.classList.add('cr-show');
+            }
+        } else if (countdownEl) {
+            countdownEl.classList.remove('cr-show');
+        }
+
+        // =====================================
+        // LOGIQUE DE SKIP
+        // =====================================
         const currentSegment = activeSegments.find(seg => currentTime >= seg.start && currentTime < seg.end - 0.5);
 
         if (currentSegment) {
@@ -345,6 +460,7 @@
             }
 
             if (currentTime < targetTime && currentTime < duration - 3) {
+                if (countdownEl) countdownEl.classList.remove('cr-show'); 
                 forceJumpToTime(targetTime);
             }
         }
@@ -687,6 +803,12 @@
             videoElement.addEventListener('playing', handleTimeUpdate);
             videoElement.addEventListener('loadedmetadata', () => setTimeout(drawHighlights, 1000));
             videoElement.dataset.crSkipInitialized = "true";
+        }
+
+        if (!document.getElementById('cr-countdown-overlay')) {
+            const cd = document.createElement('div');
+            cd.id = 'cr-countdown-overlay';
+            playerContainer.appendChild(cd);
         }
 
         if (!document.getElementById('cr-skip-menu')) {
