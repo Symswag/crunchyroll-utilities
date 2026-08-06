@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      8.7.1
-// @description  Couteau suisse Crunchyroll : Fix RTX VSR & Option durée du compte à rebours
+// @version      8.7.2
+// @description  Couteau suisse Crunchyroll
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=crunchyroll.com
@@ -208,7 +208,7 @@
         #cr-countdown-overlay {
             position: absolute;
             bottom: 110px;
-            right: 35px;
+            left: 35px;
             width: 50px;
             height: 50px;
             border-radius: 50%;
@@ -523,8 +523,12 @@
     }
 
     window.addEventListener('keydown', (e) => {
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-        if (!videoElement) return;
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.className == "ms-shadow"){
+            e.stopImmediatePropagation();
+            return;
+        }
+
+        if (e.target.tagName === 'BUTTON') return;
 
         if (e.code === hotkeysConfig.togglePlay.key) {
             e.preventDefault();
