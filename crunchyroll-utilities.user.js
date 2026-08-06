@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      8.6.0
-// @description  Couteau suisse Crunchyroll
+// @version      8.7.1
+// @description  Couteau suisse Crunchyroll : Fix RTX VSR & Option durée du compte à rebours
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=crunchyroll.com
@@ -55,7 +55,8 @@
             toggleFullscreen: "Plein écran",
             reloadStream: "Recharger la vidéo",
             pressKey: "Appuyez...",
-            unassigned: "Non assigné"
+            unassigned: "Non assigné",
+            countdownLength: "Durée du compte à rebours (s) :"
         },
         en: {
             configTitle: "⚙️ Advanced Settings",
@@ -91,7 +92,8 @@
             toggleFullscreen: "Toggle Fullscreen",
             reloadStream: "Reload Stream",
             pressKey: "Press...",
-            unassigned: "Unassigned"
+            unassigned: "Unassigned",
+            countdownLength: "Countdown duration (s):"
         }
     };
 
@@ -106,9 +108,10 @@
     let videoElement = null;
     let playerContainer = null;
     let currentEpisodeId = null;
-    
+
     let skipTypesEnabled = GM_getValue('cr_skip_types', { intro: true, outro: true, recap: true, preview: true });
-    
+    let countdownDuration = GM_getValue('cr_countdown_sec', 3);
+
     let hotkeysConfig = GM_getValue('cr_hotkeys_multi', {
         forward: [{ key: 'KeyS', time: 85 }],
         backward: [{ key: 'KeyQ', time: 85 }]
@@ -116,16 +119,16 @@
 
     if (!hotkeysConfig.openIntro) hotkeysConfig.openIntro = { key: 'KeyI' };
     if (!hotkeysConfig.openOutro) hotkeysConfig.openOutro = { key: 'KeyO' };
-    if (!hotkeysConfig.addAuto) hotkeysConfig.addAuto = { key: 'KeyU' }; 
-    if (!hotkeysConfig.openMenu) hotkeysConfig.openMenu = { key: 'KeyM' }; 
-    if (!hotkeysConfig.togglePlay) hotkeysConfig.togglePlay = { key: 'Space' }; 
+    if (!hotkeysConfig.addAuto) hotkeysConfig.addAuto = { key: 'KeyU' };
+    if (!hotkeysConfig.openMenu) hotkeysConfig.openMenu = { key: 'KeyM' };
+    if (!hotkeysConfig.togglePlay) hotkeysConfig.togglePlay = { key: 'Space' };
     if (!hotkeysConfig.toggleFullscreen) hotkeysConfig.toggleFullscreen = { key: 'KeyF' };
     if (!hotkeysConfig.reloadStream) hotkeysConfig.reloadStream = { key: 'KeyR' };
-    
+
     let isSkipping = false;
     let hasAutoFilled = false;
     let autoFillTimer = null;
-    let localData = GM_getValue('cr_sync_data', {}); 
+    let localData = GM_getValue('cr_sync_data', {});
 
     const formatKeyDisplay = (code) => {
         if (!code || code === 'UNASSIGNED') return t('unassigned');
@@ -133,11 +136,11 @@
     };
 
     GM_addStyle(`
-        #cr-skip-menu, #cr-config-menu { 
-            position: absolute; bottom: 85px; right: 15px; z-index: 2147483647; 
-            background: rgba(14, 15, 18, 0.95); color: #fff; padding: 18px; 
-            border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); 
-            width: 300px; font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+        #cr-skip-menu, #cr-config-menu {
+            position: absolute; bottom: 85px; right: 15px; z-index: 2147483647;
+            background: rgba(14, 15, 18, 0.95); color: #fff; padding: 18px;
+            border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);
+            width: 300px; font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             box-shadow: 0 10px 30px rgba(0,0,0,0.7); display: none; backdrop-filter: blur(5px);
             max-height: 60vh;
             overflow-y: auto;
@@ -159,8 +162,8 @@
         .cr-row { margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
         .cr-row label { color: #ddd; display: flex; align-items: center; gap: 8px; cursor: pointer; }
         .cr-input-group { display: flex; align-items: center; gap: 3px; }
-        .cr-row input[type="text"] { width: 75px; background: #2a2c33; color: #fff; border: 1px solid #444; padding: 6px; border-radius: 4px; text-align: center; font-family: monospace; }
-        .cr-row input[type="text"]:focus { border-color: #f47521; outline: none; }
+        .cr-row input[type="text"], .cr-row input[type="number"] { width: 75px; background: #2a2c33; color: #fff; border: 1px solid #444; padding: 6px; border-radius: 4px; text-align: center; font-family: monospace; }
+        .cr-row input[type="text"]:focus, .cr-row input[type="number"]:focus { border-color: #f47521; outline: none; }
         .cr-row select { background: #2a2c33; color: #fff; border: 1px solid #444; padding: 6px; border-radius: 4px; width: 100px; cursor: pointer; }
         .cr-btn-time { background: transparent; color: #f47521; border: 1px solid rgba(244,117,33,0.3); padding: 5px 6px; cursor: pointer; border-radius: 4px; font-size: 13px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
         .cr-btn-time:hover { background: rgba(244,117,33,0.1); border-color: rgba(244,117,33,0.6); }
@@ -184,17 +187,17 @@
         .cr-highlight { position: absolute; height: 100%; opacity: 0.9; border-radius: 2px; }
         .cr-hl-intro { background-color: #28a745; }
         .cr-hl-outro { background-color: #dc3545; }
-        .cr-hl-recap { background-color: #ffc107; }  
-        .cr-hl-preview { background-color: #007bff; } 
+        .cr-hl-recap { background-color: #ffc107; }
+        .cr-hl-preview { background-color: #007bff; }
         #cr-skip-btn:hover svg { fill: #f47521; }
         .cr-sync-status { font-size: 10px; text-align: center; margin-top: 10px; opacity: 0.5; color: #aaa; }
-        
+
         .cr-hk-btn { font-weight: bold; background: rgba(244,117,33,0.1); color: #fff; width: 85px !important; }
         .cr-hk-btn.capturing { background: #dc3545; color: #fff; border-color: #dc3545; animation: pulse 1s infinite; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
         .cr-add-hk:hover { color: #fff !important; }
         .cr-hk-row { display: flex; justify-content: space-between; background: rgba(255,255,255,0.02); padding: 5px; border-radius: 4px; margin-bottom: 4px; align-items: center; }
-        
+
         .cr-hk-time-wrapper { display: flex; align-items: center; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; transition: all 0.2s; }
         .cr-hk-time-wrapper:focus-within { border-color: #f47521; box-shadow: 0 0 5px rgba(244,117,33,0.2); }
         .cr-hk-time-input { width: 35px !important; background: transparent !important; color: #f47521 !important; border: none !important; padding: 4px 0 4px 6px !important; text-align: right; font-weight: bold; font-family: "Segoe UI", sans-serif; font-size: 13px; -moz-appearance: textfield; outline: none; }
@@ -209,18 +212,17 @@
             width: 50px;
             height: 50px;
             border-radius: 50%;
-            background: rgba(14, 15, 18, 0.95); /* Opacité augmentée pour compenser l'absence de flou */
+            background: rgba(14, 15, 18, 0.95);
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 1001; /* Z-INDEX CALQUÉ SUR CELUI DU BOUTON NATIF CRUNCHYROLL */
+            z-index: 1001;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.6);
             opacity: 0;
-            visibility: hidden; 
+            visibility: hidden;
             transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
             transform: scale(0.8);
             pointer-events: none;
-            /* backdrop-filter: blur(5px); --- DÉSACTIVÉ POUR TEST VSR --- */
         }
         #cr-countdown-overlay.cr-show {
             opacity: 1;
@@ -243,9 +245,9 @@
             stroke: #f47521;
             stroke-width: 4;
             stroke-linecap: round;
-            stroke-dasharray: 126; 
+            stroke-dasharray: 126;
             stroke-dashoffset: 0;
-            transition: stroke-dashoffset 0.2s linear; 
+            transition: stroke-dashoffset 0.2s linear;
         }
         #cr-countdown-number {
             color: #f47521;
@@ -259,14 +261,14 @@
     // =====================================================================
     // 🌐 CLOUD & UTILITAIRES DE TEMPS (SUPABASE SQL)
     // =====================================================================
-    
+
     function getSupaUrl() {
         return GM_getValue('cr_supa_url', '').replace(/\/$/, '');
     }
 
     function getSupaHeaders(isUpsert = false) {
         const apiKey = GM_getValue('cr_supa_key', '');
-        const headers = { 
+        const headers = {
             "apikey": apiKey,
             "Authorization": `Bearer ${apiKey}`,
             "Content-Type": "application/json"
@@ -280,11 +282,11 @@
     function checkSupaConnection() {
         const statusEl = document.getElementById('cr-sync-text');
         if (!getSupaUrl() || !GM_getValue('cr_supa_key', '')) {
-            if (statusEl) statusEl.innerText = t('errMissing'); 
+            if (statusEl) statusEl.innerText = t('errMissing');
             return;
         }
         if (statusEl) statusEl.innerText = t('cloudCheck');
-        
+
         GM_xmlhttpRequest({
             method: "GET",
             url: `${getSupaUrl()}/rest/v1/episode_skips?limit=1`,
@@ -305,7 +307,7 @@
 
     function fetchCurrentEpisodeFromCloud(episodeId) {
         if (!episodeId || !getSupaUrl() || !GM_getValue('cr_supa_key', '')) return;
-        
+
         const statusEl = document.getElementById('cr-sync-text');
         if (statusEl) statusEl.innerText = t('cloudCheck');
 
@@ -321,8 +323,8 @@
                         records.forEach(row => {
                             localData[episodeId][row.skip_type] = { start: row.start_time, end: row.end_time };
                         });
-                        GM_setValue('cr_sync_data', localData); 
-                        updateMenuList(); 
+                        GM_setValue('cr_sync_data', localData);
+                        updateMenuList();
                         drawHighlights();
                         if (statusEl) {
                             statusEl.innerText = t('cloudOk');
@@ -364,28 +366,28 @@
     // =====================================================================
     function forceJumpToTime(targetTime) {
         if (!videoElement) return;
-        isSkipping = true; 
+        isSkipping = true;
         const slider = document.querySelector('input.timeline-slider[type="range"]');
         if (slider) {
             slider.value = targetTime;
             slider.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-            slider.dispatchEvent(new Event('input', { bubbles: true })); 
+            slider.dispatchEvent(new Event('input', { bubbles: true }));
             slider.dispatchEvent(new Event('change', { bubbles: true }));
             slider.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
         } else {
             videoElement.currentTime = targetTime;
         }
-        setTimeout(() => { 
-            isSkipping = false; 
+        setTimeout(() => {
+            isSkipping = false;
         }, 200);
     }
 
     function handleTimeUpdate() {
         if (!videoElement || isSkipping) return;
-        
-        const data = localData[currentEpisodeId] || {}; 
+
+        const data = localData[currentEpisodeId] || {};
         const currentTime = videoElement.currentTime;
-        const duration = videoElement.duration; 
+        const duration = videoElement.duration;
 
         const activeSegments = [];
         for (const [type, segment] of Object.entries(data)) {
@@ -394,17 +396,18 @@
             }
         }
 
-        const COUNTDOWN_SEC = 3;
+        // On utilise la variable dynamique ici :
+        const COUNTDOWN_SEC = countdownDuration;
         const countdownEl = document.getElementById('cr-countdown-overlay');
-        
+
         const upcomingSegment = activeSegments.find(seg => currentTime >= seg.start - COUNTDOWN_SEC && currentTime < seg.start);
 
         if (upcomingSegment && !videoElement.paused) {
             const exactRemaining = upcomingSegment.start - currentTime;
             const displayRemaining = Math.ceil(exactRemaining);
-            
+
             if (exactRemaining > 0 && exactRemaining <= COUNTDOWN_SEC && countdownEl) {
-                
+
                 if (!countdownEl.querySelector('.cr-spinner')) {
                     countdownEl.innerHTML = `
                         <svg class="cr-spinner" viewBox="0 0 50 50">
@@ -420,8 +423,8 @@
 
                 const progressEl = countdownEl.querySelector('.cr-spinner-progress');
                 if (progressEl) {
-                    const progressRatio = exactRemaining / COUNTDOWN_SEC; 
-                    const dashoffset = 126 - (126 * progressRatio); 
+                    const progressRatio = exactRemaining / COUNTDOWN_SEC;
+                    const dashoffset = 126 - (126 * progressRatio);
                     progressEl.style.strokeDashoffset = dashoffset;
                 }
 
@@ -452,7 +455,7 @@
             }
 
             if (currentTime < targetTime && currentTime < duration - 3) {
-                if (countdownEl) countdownEl.classList.remove('cr-show'); 
+                if (countdownEl) countdownEl.classList.remove('cr-show');
                 forceJumpToTime(targetTime);
             }
         }
@@ -464,27 +467,27 @@
         if (!menu || !configMenu) return;
 
         const isAnyMenuOpen = menu.style.display === 'block' || configMenu.style.display === 'block';
-        
+
         if (isAnyMenuOpen) {
-            menu.style.display = 'none'; 
+            menu.style.display = 'none';
             configMenu.style.display = 'none';
         } else {
             menu.style.display = 'block';
             if (videoElement && !hasAutoFilled) {
                 const ratio = videoElement.currentTime / videoElement.duration;
                 let guessType = 'intro';
-                if (ratio > 0.8) guessType = 'outro'; 
-                if (ratio > 0.95) guessType = 'preview'; 
-                if (ratio < 0.1 && videoElement.currentTime > 60) guessType = 'recap'; 
+                if (ratio > 0.8) guessType = 'outro';
+                if (ratio > 0.95) guessType = 'preview';
+                if (ratio < 0.1 && videoElement.currentTime > 60) guessType = 'recap';
 
                 document.getElementById('cr-type-sel').value = guessType;
                 document.getElementById('cr-start-in').value = secondsToTime(videoElement.currentTime);
-                
+
                 const maxDur = videoElement.duration || 0;
                 let predictedEnd = videoElement.currentTime + INTRO_OUTRO_LENGTH;
                 if (predictedEnd > maxDur) predictedEnd = maxDur;
                 document.getElementById('cr-end-in').value = secondsToTime(predictedEnd);
-                
+
                 hasAutoFilled = true;
                 if (autoFillTimer) clearTimeout(autoFillTimer);
                 autoFillTimer = setTimeout(() => { hasAutoFilled = false; }, 120000);
@@ -508,7 +511,7 @@
         let predictedEnd = videoElement.currentTime + INTRO_OUTRO_LENGTH;
         if (predictedEnd > maxDur) predictedEnd = maxDur;
         document.getElementById('cr-end-in').value = secondsToTime(predictedEnd);
-        
+
         hasAutoFilled = true;
         if (autoFillTimer) clearTimeout(autoFillTimer);
         autoFillTimer = setTimeout(() => { hasAutoFilled = false; }, 120000);
@@ -524,7 +527,7 @@
         if (!videoElement) return;
 
         if (e.code === hotkeysConfig.togglePlay.key) {
-            e.preventDefault(); 
+            e.preventDefault();
             e.stopPropagation();
             if (videoElement.paused) videoElement.play();
             else videoElement.pause();
@@ -533,12 +536,12 @@
 
         if (e.code === hotkeysConfig.toggleFullscreen.key) {
             e.preventDefault(); e.stopPropagation();
-            
-            const nativeFullscreenBtn = document.querySelector('[data-testid="fullscreen-button"]') || 
+
+            const nativeFullscreenBtn = document.querySelector('[data-testid="fullscreen-button"]') ||
                                         document.querySelector('[data-testid="exit-fullscreen-button"]') ||
-                                        document.querySelector('[aria-label="Fullscreen"]') || 
+                                        document.querySelector('[aria-label="Fullscreen"]') ||
                                         document.querySelector('[aria-label="Exit Fullscreen"]');
-            
+
             if (nativeFullscreenBtn) {
                 nativeFullscreenBtn.click();
             } else {
@@ -564,7 +567,7 @@
                 const ratio = videoElement.currentTime / videoElement.duration;
                 if (ratio > 0.95) {
                     openQuickMenu('preview')
-                } else {    
+                } else {
                     const type = (videoElement.currentTime < videoElement.duration / 2) ? 'intro' : 'outro';
                     openQuickMenu(type);
                 }
@@ -623,7 +626,7 @@
         }
 
         if (isNaN(videoElement.duration) || videoElement.duration === 0) return;
-        const data = localData[currentEpisodeId] || {}; 
+        const data = localData[currentEpisodeId] || {};
         const duration = videoElement.duration;
 
         ['intro', 'outro', 'recap', 'preview'].forEach(type => {
@@ -691,7 +694,7 @@
                     <span style="color:#aaa; font-size:12px;">${label}</span>
                     <button class="cr-icon-btn cr-add-hk" data-dir="${dir}" title="Ajouter" style="color:#f47521; font-size:18px;">+</button>
                 </div>`;
-            
+
             hotkeysConfig[dir].forEach((hk, index) => {
                 dirHtml += `
                 <div class="cr-hk-row">
@@ -713,7 +716,7 @@
 
         html += renderDirection('forward', t('forward'));
         html += renderDirection('backward', t('backward'));
-        
+
         container.innerHTML = html;
         attachHotkeysDOMListeners();
     }
@@ -745,7 +748,7 @@
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
                 const dir = e.target.dataset.dir;
-                hotkeysConfig[dir].push({ key: 'UNASSIGNED', time: 10 }); 
+                hotkeysConfig[dir].push({ key: 'UNASSIGNED', time: 10 });
                 GM_setValue('cr_hotkeys_multi', hotkeysConfig);
                 renderHotkeysSettings();
             });
@@ -754,9 +757,9 @@
         document.querySelectorAll('.cr-hk-btn').forEach(btn => {
             btn.addEventListener('click', function(e) {
                 e.preventDefault();
-                
+
                 if (this.classList.contains('capturing')) return;
-                
+
                 document.querySelectorAll('.cr-hk-btn').forEach(b => {
                     b.classList.remove('capturing');
                     if (b.classList.contains('cr-hk-single')) {
@@ -768,11 +771,11 @@
 
                 this.classList.add('capturing');
                 this.innerText = t('pressKey');
-                
+
                 const captureKey = (evt) => {
                     evt.preventDefault();
                     evt.stopPropagation();
-                    
+
                     if (this.classList.contains('cr-hk-single')) {
                         const action = this.dataset.action;
                         hotkeysConfig[action].key = evt.code;
@@ -781,14 +784,14 @@
                         const idx = parseInt(this.dataset.idx);
                         hotkeysConfig[dir][idx].key = evt.code;
                     }
-                    
+
                     GM_setValue('cr_hotkeys_multi', hotkeysConfig);
                     this.innerText = formatKeyDisplay(evt.code);
                     this.classList.remove('capturing');
-                    
+
                     window.removeEventListener('keydown', captureKey, true);
                 };
-                
+
                 setTimeout(() => window.addEventListener('keydown', captureKey, true), 100);
             });
         });
@@ -810,10 +813,7 @@
         if (!document.getElementById('cr-countdown-overlay')) {
             const cd = document.createElement('div');
             cd.id = 'cr-countdown-overlay';
-            
-            // =====================================
-            // INJECTION AU PIXEL PRÈS (COMME LE BOUTON NATIF)
-            // =====================================
+
             const controlsRoot = document.querySelector('[data-testid="player-controls-root"]');
             if (controlsRoot) {
                 const spacer = controlsRoot.querySelector('.kat\\:grow');
@@ -841,7 +841,7 @@
                         <button class="cr-icon-btn" id="cr-close-menu">✖</button>
                     </div>
                 </div>
-                
+
                 <div style="font-size: 13px; color: #ddd; margin-bottom: 8px;"><b>${t('autoSkip')}</b></div>
                 <div class="cr-types-grid">
                     <label><input type="checkbox" class="cr-cb-type" value="intro" ${skipTypesEnabled.intro ? 'checked' : ''}> Intro</label>
@@ -851,7 +851,7 @@
                 </div>
 
                 <hr style="border-color: rgba(255,255,255,0.05); margin: 12px 0;">
-                
+
                 <div class="cr-row">
                     <label>${t('type')}</label>
                     <select id="cr-type-sel">
@@ -861,19 +861,19 @@
                         <option value="preview">Preview</option>
                     </select>
                 </div>
-                
+
                 <div class="cr-row"><label>${t('start')}</label><div class="cr-input-group">
                     <input type="text" id="cr-start-in" placeholder="00:00">
                     <button class="cr-btn-time" id="cr-get-start" title="${t('currTime')}">${CR_CLOCK_SVG}</button>
                     <button class="cr-btn-time" id="cr-get-start-zero" title="${t('zeroTime')}">${CR_START_SVG}</button>
                 </div></div>
-                
+
                 <div class="cr-row"><label>${t('end')}</label><div class="cr-input-group">
                     <input type="text" id="cr-end-in" placeholder="01:30">
                     <button class="cr-btn-time" id="cr-get-end" title="${t('currTime')}">${CR_CLOCK_SVG}</button>
                     <button class="cr-btn-time" id="cr-get-max" title="${t('maxTime')}">${CR_END_SVG}</button>
                 </div></div>
-                
+
                 <button class="cr-btn-save" id="cr-save-btn">${t('saveBtn')}</button>
                 <div id="cr-saved-list"></div>
                 <div class="cr-sync-status" id="cr-sync-text">${t('verify')}</div>
@@ -897,17 +897,46 @@
                         <button class="cr-icon-btn" id="cr-close-config">✖</button>
                     </div>
                 </div>
-                
+
                 <div style="font-size: 13px; color: #ddd; margin-bottom: 8px;"><b>☁️ Cloud Sync (SQL Supabase)</b></div>
-                <label style="font-size: 11px; color:#aaa; margin-bottom: 4px; display: block;">URL Supabase</label>
-                <input type="text" class="cr-input-full" id="cr-supa-url" placeholder="https://xxx.supabase.co" value="${GM_getValue('cr_supa_url', '')}">
-                <label style="font-size: 11px; color:#aaa; margin-bottom: 4px; display: block;">Clé API (anon/public)</label>
-                <input type="password" class="cr-input-full" id="cr-supa-key" placeholder="eyJhbGciOiJIUzI1Ni..." value="${GM_getValue('cr_supa_key', '')}">
-                
+                <div style="margin-bottom: 15px; border-left: 2px solid #444; padding-left: 8px;">
+                    <div class="cr-row" style="margin-bottom: 4px; background: transparent;">
+                        <label style="font-size: 12px; color:#aaa;">URL Supabase</label>
+                    </div>
+                    <div class="cr-row" style="margin-bottom: 4px; background: transparent;">
+                        <input type="text" class="cr-input-full" id="cr-supa-url" style="width:100%;" placeholder="https://xxx.supabase.co" value="${GM_getValue('cr_supa_url', '')}">
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 15px; border-left: 2px solid #444; padding-left: 8px;">
+                    <div class="cr-row" style="margin-bottom: 4px; background: transparent;">
+                        <label style="font-size: 12px; color:#aaa; ">Clé API (anon/public)</label>
+                    </div>
+                    <div class="cr-row" style="margin-bottom: 4px; background: transparent;">
+                        <input type="password" class="cr-input-full" id="cr-supa-key" placeholder="eyJhbGciOiJIUzI1Ni..." value="${GM_getValue('cr_supa_key', '')}">
+                    </div>
+                </div>
+
                 <hr style="border-color: rgba(255,255,255,0.05); margin: 15px 0;">
-                
+
+                <div style="font-size: 13px; color: #ddd; margin-bottom: 8px;"><b>⏱️ Interface</b></div>
+
+
+<div style="margin-bottom: 15px; border-left: 2px solid #444; padding-left: 8px;">
+<div class="cr-row" style="margin-bottom: 4px; background: transparent;">
+                    <label style="font-size: 12px; color:#aaa;">${t('countdownLength')}</label>
+
+                    <div class="cr-hk-time-wrapper" title="Durée (secondes)">
+                            <input type="number" id="cr-countdown-sec" class="cr-hk-time-input" value="${countdownDuration}" min="1" max="15">
+                            <span class="cr-hk-time-label">s</span>
+                        </div>
+                    </div>
+</div>
+
+                <hr style="border-color: rgba(255,255,255,0.05); margin: 15px 0;">
+
                 <div id="cr-hotkeys-container"></div>
-                
+
                 <button class="cr-btn-save" id="cr-save-keys" style="margin-top: 15px;">${t('saveKeys')}</button>
             `;
             playerContainer.appendChild(configMenu);
@@ -932,15 +961,22 @@
                     }
                 });
             };
-            
+
             document.getElementById('cr-save-keys').onclick = () => {
                 GM_setValue('cr_supa_url', document.getElementById('cr-supa-url').value.trim());
                 GM_setValue('cr_supa_key', document.getElementById('cr-supa-key').value.trim());
+
+                // Sauvegarde de la durée du compte à rebours
+                let newDuration = parseInt(document.getElementById('cr-countdown-sec').value, 10);
+                if (isNaN(newDuration) || newDuration < 1) newDuration = 3; // Fallback
+                countdownDuration = newDuration;
+                GM_setValue('cr_countdown_sec', countdownDuration);
+
                 document.getElementById('cr-close-config').click();
-                checkSupaConnection(); 
+                checkSupaConnection();
             };
-            
-            document.getElementById('cr-get-start').onclick = () => { 
+
+            document.getElementById('cr-get-start').onclick = () => {
                 document.getElementById('cr-start-in').value = secondsToTime(videoElement.currentTime);
                 const maxDur = videoElement.duration || 0;
                 let predictedEnd = videoElement.currentTime + INTRO_OUTRO_LENGTH;
@@ -967,25 +1003,25 @@
                 const type = document.getElementById('cr-type-sel').value;
                 const start = timeToSeconds(document.getElementById('cr-start-in').value);
                 let end = timeToSeconds(document.getElementById('cr-end-in').value);
-                
+
                 const maxDur = videoElement ? videoElement.duration : Infinity;
                 if (end > maxDur) { end = maxDur; }
-                
+
                 localData[currentEpisodeId] = localData[currentEpisodeId] || {};
                 localData[currentEpisodeId][type] = { start, end };
-                GM_setValue('cr_sync_data', localData); 
-                
+                GM_setValue('cr_sync_data', localData);
+
                 document.getElementById('cr-start-in').value = '';
                 document.getElementById('cr-end-in').value = '';
                 hasAutoFilled = false;
                 if (autoFillTimer) { clearTimeout(autoFillTimer); autoFillTimer = null; }
 
-                updateMenuList(); 
+                updateMenuList();
                 drawHighlights();
 
                 if (getSupaUrl() && GM_getValue('cr_supa_key', '')) {
                     status.innerText = t('cloudSend');
-                    
+
                     const payload = {
                         episode_id: currentEpisodeId,
                         skip_type: type,
@@ -1009,23 +1045,23 @@
                     });
                 }
             };
-            
+
             updateMenuList();
             checkSupaConnection();
         }
 
         if (!document.getElementById('cr-skip-btn')) {
-            const outer = document.createElement('div'); 
+            const outer = document.createElement('div');
             outer.className = 'kat:relative';
             outer.style.display = 'flex';
             outer.style.alignItems = 'center';
-            
+
             const inner = document.createElement('div'); inner.className = 'kat:relative';
             const btn = document.createElement('button');
             btn.id = 'cr-skip-btn'; btn.type = 'button'; btn.title = "CR Utilities";
-            btn.className = 'kat:flex kat:items-center kat:justify-center kat:h-44 kat:w-44 kat:@lg:h-64 kat:@lg:w-64 kat:opacity-75 kat:hover:opacity-100 kat:fill-icon-tertiary kat:hover:bg-neutral-700 kat:rounded-full kat:cursor-pointer'; 
+            btn.className = 'kat:flex kat:items-center kat:justify-center kat:h-44 kat:w-44 kat:@lg:h-64 kat:@lg:w-64 kat:opacity-75 kat:hover:opacity-100 kat:fill-icon-tertiary kat:hover:bg-neutral-700 kat:rounded-full kat:cursor-pointer';
             btn.innerHTML = CR_GEAR_SVG_MAIN;
-            
+
             const block = (e) => { e.preventDefault(); e.stopPropagation(); };
             btn.addEventListener('click', (e) => {
                 block(e);
@@ -1033,13 +1069,13 @@
             });
             btn.addEventListener('mousedown', block);
             inner.appendChild(btn); outer.appendChild(inner);
-            
-            let target = document.querySelector('[data-testid="track-selection-button"]') || 
+
+            let target = document.querySelector('[data-testid="track-selection-button"]') ||
                          document.querySelector('[data-testid="playback-speed-button"]') ||
                          document.querySelector('[data-testid="next-episode-icon"]') ||
-                         document.querySelector('[data-testid="settings-button"]') || 
+                         document.querySelector('[data-testid="settings-button"]') ||
                          document.querySelector('[data-testid="audio-and-subtitles-button"]');
-            
+
             if (!target && playerContainer) {
                 const all = Array.from(playerContainer.querySelectorAll('svg')).filter(svg => !svg.closest('#cr-skip-menu, #cr-config-menu, #cr-skip-btn'));
                 target = all.length > 2 ? all[all.length - 2].closest('button, [role="button"]') : null;
@@ -1049,7 +1085,7 @@
                 while (btnGroup && btnGroup.children.length < 2 && btnGroup.tagName !== 'BODY') {
                     btnGroup = btnGroup.parentElement;
                 }
-                if (btnGroup) { btnGroup.insertBefore(outer, btnGroup.firstChild); } 
+                if (btnGroup) { btnGroup.insertBefore(outer, btnGroup.firstChild); }
                 else { target.parentElement.insertBefore(outer, target); }
             }
         }
@@ -1060,12 +1096,12 @@
         if (!list) return;
         list.innerHTML = `<div class="cr-saved-title">${t('savedList')}</div>`;
         const data = localData[currentEpisodeId] || {};
-        
+
         let hasData = false;
         Object.keys(data).forEach(type => {
             hasData = true;
             const item = document.createElement('div'); item.className = 'cr-saved-item';
-            let color = '#f47521'; 
+            let color = '#f47521';
             if (type === 'outro') color = '#dc3545';
             if (type === 'recap') color = '#ffc107';
             if (type === 'preview') color = '#007bff';
@@ -1074,13 +1110,13 @@
             item.querySelector('button').onclick = () => {
                 delete localData[currentEpisodeId][type];
                 GM_setValue('cr_sync_data', localData);
-                updateMenuList(); 
+                updateMenuList();
                 drawHighlights();
-                
+
                 if (getSupaUrl() && GM_getValue('cr_supa_key', '')) {
                     const status = document.getElementById('cr-sync-text');
                     if (status) status.innerText = t('cloudDel');
-                    
+
                     GM_xmlhttpRequest({
                         method: "DELETE",
                         url: `${getSupaUrl()}/rest/v1/episode_skips?episode_id=eq.${currentEpisodeId}&skip_type=eq.${type}`,
@@ -1098,7 +1134,7 @@
             };
             list.appendChild(item);
         });
-        
+
         if (!hasData) {
             list.innerHTML += `<div style="color: #666; padding-left: 5px;">${t('emptyList')}</div>`;
         }
@@ -1120,11 +1156,10 @@
             currentEpisodeId = null; videoElement = null; playerContainer = null; return;
         }
         if (id !== currentEpisodeId) {
-            currentEpisodeId = id; 
+            currentEpisodeId = id;
             hasAutoFilled = false;
             if (autoFillTimer) { clearTimeout(autoFillTimer); autoFillTimer = null; }
-            
-            // Va chercher les données du nouvel épisode sur Supabase
+
             fetchCurrentEpisodeFromCloud(id);
         }
         initMenuAndButton();
