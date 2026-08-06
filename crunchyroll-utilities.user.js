@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      8.3.1
-// @description  Couteau suisse Crunchyroll : Fix RTX VSR (visibility mask)
+// @version      8.6.0
+// @description  Couteau suisse Crunchyroll
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=crunchyroll.com
@@ -139,13 +139,12 @@
             border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); 
             width: 300px; font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
             box-shadow: 0 10px 30px rgba(0,0,0,0.7); display: none; backdrop-filter: blur(5px);
-            max-height: 60vh; /* LIMITE LA HAUTEUR DU MENU (60% de l'écran) */
-            overflow-y: auto; /* ACTIVE LE SCROLL SI BESOIN */
+            max-height: 60vh;
+            overflow-y: auto;
             overflow-x: hidden;
-            overscroll-behavior: contain; /* ÉVITE DE SCROLLER LA PAGE EN ARRIÈRE-PLAN */
+            overscroll-behavior: contain;
         }
 
-        /* CUSTOM SCROLLBAR POUR UN LOOK PREMIUM */
         #cr-skip-menu::-webkit-scrollbar, #cr-config-menu::-webkit-scrollbar { width: 6px; }
         #cr-skip-menu::-webkit-scrollbar-track, #cr-config-menu::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 4px; }
         #cr-skip-menu::-webkit-scrollbar-thumb, #cr-config-menu::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
@@ -202,7 +201,7 @@
         .cr-hk-time-input::-webkit-outer-spin-button, .cr-hk-time-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .cr-hk-time-label { color: #666; font-size: 11px; padding: 0 6px 0 2px; font-weight: bold; user-select: none; }
 
-        /* COMPTE À REBOURS ANIMÉ - CORRIGÉ POUR RTX VSR */
+        /* COMPTE À REBOURS - SANS FLOU ET Z-INDEX MODIFIÉ */
         #cr-countdown-overlay {
             position: absolute;
             bottom: 110px;
@@ -210,22 +209,22 @@
             width: 50px;
             height: 50px;
             border-radius: 50%;
-            background: rgba(14, 15, 18, 0.85);
+            background: rgba(14, 15, 18, 0.95); /* Opacité augmentée pour compenser l'absence de flou */
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 2147483647;
+            z-index: 1001; /* Z-INDEX CALQUÉ SUR CELUI DU BOUTON NATIF CRUNCHYROLL */
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.6);
             opacity: 0;
-            visibility: hidden; /* C'est cette ligne qui sauve le VSR en détruisant la couche graphique */
+            visibility: hidden; 
             transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
             transform: scale(0.8);
             pointer-events: none;
-            backdrop-filter: blur(5px);
+            /* backdrop-filter: blur(5px); --- DÉSACTIVÉ POUR TEST VSR --- */
         }
         #cr-countdown-overlay.cr-show {
             opacity: 1;
-            visibility: visible; /* Et celle-ci qui la recrée */
+            visibility: visible;
             transform: scale(1);
         }
         .cr-spinner {
@@ -395,9 +394,6 @@
             }
         }
 
-        // =====================================
-        // LOGIQUE DU COMPTE À REBOURS ANIMÉ
-        // =====================================
         const COUNTDOWN_SEC = 3;
         const countdownEl = document.getElementById('cr-countdown-overlay');
         
@@ -409,7 +405,6 @@
             
             if (exactRemaining > 0 && exactRemaining <= COUNTDOWN_SEC && countdownEl) {
                 
-                // On injecte le SVG s'il n'est pas déjà présent
                 if (!countdownEl.querySelector('.cr-spinner')) {
                     countdownEl.innerHTML = `
                         <svg class="cr-spinner" viewBox="0 0 50 50">
@@ -420,15 +415,13 @@
                     `;
                 }
 
-                // Mise à jour du chiffre
                 const numEl = countdownEl.querySelector('#cr-countdown-number');
                 if (numEl) numEl.innerText = displayRemaining;
 
-                // Mise à jour de l'animation de l'anneau (circonférence ~126)
                 const progressEl = countdownEl.querySelector('.cr-spinner-progress');
                 if (progressEl) {
-                    const progressRatio = exactRemaining / COUNTDOWN_SEC; // De 1 à 0
-                    const dashoffset = 126 - (126 * progressRatio); // De 0 à 126
+                    const progressRatio = exactRemaining / COUNTDOWN_SEC; 
+                    const dashoffset = 126 - (126 * progressRatio); 
                     progressEl.style.strokeDashoffset = dashoffset;
                 }
 
@@ -438,9 +431,6 @@
             countdownEl.classList.remove('cr-show');
         }
 
-        // =====================================
-        // LOGIQUE DE SKIP
-        // =====================================
         const currentSegment = activeSegments.find(seg => currentTime >= seg.start && currentTime < seg.end - 0.5);
 
         if (currentSegment) {
@@ -543,11 +533,21 @@
 
         if (e.code === hotkeysConfig.toggleFullscreen.key) {
             e.preventDefault(); e.stopPropagation();
-            if (!document.fullscreenElement) {
-                const player = document.querySelector('.video-player') || playerContainer || document.documentElement;
-                if (player.requestFullscreen) player.requestFullscreen();
+            
+            const nativeFullscreenBtn = document.querySelector('[data-testid="fullscreen-button"]') || 
+                                        document.querySelector('[data-testid="exit-fullscreen-button"]') ||
+                                        document.querySelector('[aria-label="Fullscreen"]') || 
+                                        document.querySelector('[aria-label="Exit Fullscreen"]');
+            
+            if (nativeFullscreenBtn) {
+                nativeFullscreenBtn.click();
             } else {
-                if (document.exitFullscreen) document.exitFullscreen();
+                if (!document.fullscreenElement) {
+                    const player = document.querySelector('.video-player') || playerContainer || document.documentElement;
+                    if (player.requestFullscreen) player.requestFullscreen();
+                } else {
+                    if (document.exitFullscreen) document.exitFullscreen();
+                }
             }
             return;
         }
@@ -810,7 +810,22 @@
         if (!document.getElementById('cr-countdown-overlay')) {
             const cd = document.createElement('div');
             cd.id = 'cr-countdown-overlay';
-            playerContainer.appendChild(cd);
+            
+            // =====================================
+            // INJECTION AU PIXEL PRÈS (COMME LE BOUTON NATIF)
+            // =====================================
+            const controlsRoot = document.querySelector('[data-testid="player-controls-root"]');
+            if (controlsRoot) {
+                const spacer = controlsRoot.querySelector('.kat\\:grow');
+                if (spacer && spacer.nextSibling) {
+                    controlsRoot.insertBefore(cd, spacer.nextSibling);
+                } else {
+                    controlsRoot.appendChild(cd);
+                }
+            } else {
+                const videoWrapper = videoElement.closest('[data-testid="vilos-player"]') || videoElement.parentNode;
+                videoWrapper.appendChild(cd);
+            }
         }
 
         if (!document.getElementById('cr-skip-menu')) {
