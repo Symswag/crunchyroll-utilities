@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      8.7.2
+// @version      8.7.3
 // @description  Couteau suisse Crunchyroll
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
@@ -183,7 +183,7 @@
         .cr-types-grid label { background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px; cursor: pointer; transition: background 0.2s; }
         .cr-types-grid label:hover { background: rgba(255,255,255,0.1); }
         .cr-types-grid input { margin-right: 5px; cursor: pointer; accent-color: #f47521; }
-        #cr-progress-overlay { position: absolute; left: 0; width: 100%; top: 50%; transform: translateY(-50%); height: 4px; pointer-events: none; z-index: 10; }
+        #cr-progress-overlay { position: absolute; left: 0; width: 100%; top: 50%; transform: translateY(-50%); height: 4px; pointer-events: none; z-index: auto; }
         .cr-highlight { position: absolute; height: 100%; opacity: 0.9; border-radius: 2px; }
         .cr-hl-intro { background-color: #28a745; }
         .cr-hl-outro { background-color: #dc3545; }
