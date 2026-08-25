@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      8.7.3
+// @version      8.7.4
 // @description  Couteau suisse Crunchyroll
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
@@ -255,6 +255,9 @@
             font-weight: bold;
             font-family: "Segoe UI", Roboto, sans-serif;
             z-index: 2;
+            background: transparent !important;
+            box-shadow: none !important;
+            border: none !important;
         }
     `);
 
