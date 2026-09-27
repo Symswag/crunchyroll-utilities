@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      8.7.4
+// @version      8.7.5
 // @description  Couteau suisse Crunchyroll
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
@@ -247,7 +247,7 @@
             stroke-linecap: round;
             stroke-dasharray: 126;
             stroke-dashoffset: 0;
-            transition: stroke-dashoffset 0.2s linear;
+            transition: stroke-dashoffset 0.3s linear;
         }
         #cr-countdown-number {
             color: #f47521;

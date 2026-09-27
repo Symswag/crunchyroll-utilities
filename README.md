@@ -1,6 +1,6 @@
 # ⚙️ Crunchyroll Utilities (Supabase SQL Edition)
 
-![Version](https://img.shields.io/badge/version-8.7.4-orange.svg)
+![Version](https://img.shields.io/badge/version-8.7.5-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-Chrome%20Extension-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
@@ -67,10 +67,11 @@ To share your saved skips across multiple devices, you need to set up a Supabase
 ### Step 2: Link the script to Supabase
 1. Go to your Supabase **Project Overview** (located just under your project name).
 2. Copy the **Project URL** and the **API Key (anon / public)**.
-3. Play any video on Crunchyroll. Click the Gear Icon (⚙️) in the player controls to open the CR Utilities menu.
-4. Click the small gear (⚙️ Advanced Settings) at the top of the menu to open the Cloud Configuration.
-5. Paste your **Supabase URL** and **API Key** into the respective fields and click **Save & Return**.
-6. Repeat the operation on your other devices. Your data is now synced in real time!
+3. Click the **Crunchyroll Utilities** icon in Chrome's extensions toolbar.
+4. Paste your **Supabase URL** and **API Key** into the popup and click **Save settings**.
+5. The same popup also contains the countdown and keyboard shortcut settings.
+6. Play any video on Crunchyroll and click the CR Utilities gear in the player controls.
+7. Repeat the configuration on your other devices. Your data is now synced in real time!
 
 ---
 
