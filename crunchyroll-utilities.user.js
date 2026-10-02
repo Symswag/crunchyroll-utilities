@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      8.7.5
+// @version      8.7.6
 // @description  Couteau suisse Crunchyroll
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
@@ -364,6 +364,8 @@
         return match ? match[1] : null;
     }
 
+    
+
     // =====================================================================
     // ⏭️ MOTEUR DE SKIP & RACCOURCIS
     // =====================================================================
@@ -385,6 +387,11 @@
         }, 200);
     }
 
+    let isPausedByUser = false;
+    let firstAnimationFrame = true;
+    let countdownStartVideoTime = 0; 
+    let countdownInitialNumber = 0;
+
     function handleTimeUpdate() {
         if (!videoElement || isSkipping) return;
 
@@ -392,6 +399,9 @@
         const currentTime = videoElement.currentTime;
         const duration = videoElement.duration;
 
+        // ------------------------------------------------------------
+        // Gestion des segments actifs
+        // ------------------------------------------------------------
         const activeSegments = [];
         for (const [type, segment] of Object.entries(data)) {
             if (skipTypesEnabled[type]) {
@@ -399,18 +409,19 @@
             }
         }
 
-        // On utilise la variable dynamique ici :
+        // ------------------------------------------------------------
+        // Gestion du compte à rebours avant le skip
+        // ------------------------------------------------------------
         const COUNTDOWN_SEC = countdownDuration;
+        const totalLength = 2 * Math.PI * 20;
         const countdownEl = document.getElementById('cr-countdown-overlay');
 
         const upcomingSegment = activeSegments.find(seg => currentTime >= seg.start - COUNTDOWN_SEC && currentTime < seg.start);
 
         if (upcomingSegment && !videoElement.paused) {
             const exactRemaining = upcomingSegment.start - currentTime;
-            const displayRemaining = Math.ceil(exactRemaining);
 
             if (exactRemaining > 0 && exactRemaining <= COUNTDOWN_SEC && countdownEl) {
-
                 if (!countdownEl.querySelector('.cr-spinner')) {
                     countdownEl.innerHTML = `
                         <svg class="cr-spinner" viewBox="0 0 50 50">
@@ -421,24 +432,63 @@
                     `;
                 }
 
-                const numEl = countdownEl.querySelector('#cr-countdown-number');
-                if (numEl) numEl.innerText = displayRemaining;
-
                 const progressEl = countdownEl.querySelector('.cr-spinner-progress');
                 if (progressEl) {
-                    const progressRatio = exactRemaining / COUNTDOWN_SEC;
-                    const dashoffset = 126 - (126 * progressRatio);
-                    progressEl.style.strokeDashoffset = dashoffset;
+                    if (firstAnimationFrame) {
+                        console.log("Starting countdown animation");
+                        firstAnimationFrame = false;
+                        
+                        countdownStartVideoTime = currentTime;
+                        countdownInitialNumber = Math.ceil(exactRemaining);
+
+                        progressEl.style.transition = 'none';
+                        progressEl.style.strokeDashoffset = 0;
+                        progressEl.getBoundingClientRect(); // Force reflow
+                        progressEl.style.transition = `stroke-dashoffset ${COUNTDOWN_SEC}s linear`;
+                        progressEl.style.strokeDashoffset = totalLength;
+                    } else if (isPausedByUser) {
+                        console.log("Resuming countdown animation");
+                        isPausedByUser = false;
+                        const elapsed = COUNTDOWN_SEC - exactRemaining;
+                        const newOffset = (elapsed / COUNTDOWN_SEC) * totalLength;
+                        
+                        progressEl.style.transition = 'none';
+                        progressEl.style.strokeDashoffset = newOffset;
+                        progressEl.getBoundingClientRect(); // Force reflow
+                        progressEl.style.transition = `stroke-dashoffset ${exactRemaining}s linear`;
+                        progressEl.style.strokeDashoffset = totalLength;
+                    }
+                }
+
+                const elapsedVideoTime = currentTime - countdownStartVideoTime;
+                
+                if (elapsedVideoTime < 0 || elapsedVideoTime > COUNTDOWN_SEC) {
+                    countdownStartVideoTime = currentTime;
+                    countdownInitialNumber = Math.ceil(exactRemaining);
+                }
+
+                let displayRemaining = countdownInitialNumber - Math.floor(elapsedVideoTime);
+                if (displayRemaining < 1) displayRemaining = 1;
+
+                const numEl = countdownEl.querySelector('#cr-countdown-number');
+                if (numEl && numEl.innerText !== String(displayRemaining)) {
+                    numEl.innerText = displayRemaining;
                 }
 
                 countdownEl.classList.add('cr-show');
             }
+        } else if (upcomingSegment && videoElement.paused) {
+            isPausedByUser = true;
+            countdownEl.classList.remove('cr-show');
         } else if (countdownEl) {
             countdownEl.classList.remove('cr-show');
+            firstAnimationFrame = true;
         }
 
+        // ------------------------------------------------------------
+        // Gestion du skip automatique
+        // ------------------------------------------------------------
         const currentSegment = activeSegments.find(seg => currentTime >= seg.start && currentTime < seg.end - 0.5);
-
         if (currentSegment) {
             let targetTime = currentSegment.end;
             let extended = true;
@@ -459,6 +509,7 @@
 
             if (currentTime < targetTime && currentTime < duration - 3) {
                 if (countdownEl) countdownEl.classList.remove('cr-show');
+                firstAnimationFrame = true;
                 forceJumpToTime(targetTime);
             }
         }
