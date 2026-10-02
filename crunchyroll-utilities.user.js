@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Utilities
 // @namespace    http://tampermonkey.net/
-// @version      8.7.6
+// @version      8.7.7
 // @description  Couteau suisse Crunchyroll
 // @author       Symswag
 // @match        *://*.crunchyroll.com/*
@@ -413,7 +413,7 @@
         // Gestion du compte à rebours avant le skip
         // ------------------------------------------------------------
         const COUNTDOWN_SEC = countdownDuration;
-        const totalLength = 2 * Math.PI * 20;
+        const totalLength = 126;
         const countdownEl = document.getElementById('cr-countdown-overlay');
 
         const upcomingSegment = activeSegments.find(seg => currentTime >= seg.start - COUNTDOWN_SEC && currentTime < seg.start);
